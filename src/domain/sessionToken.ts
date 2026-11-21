@@ -9,8 +9,7 @@ function sha256(ascii: Uint8Array): Uint8Array {
   const mathPow = Math.pow;
   const maxWord = mathPow(2, 32);
   const lengthProperty = 'length';
-  let i = 0, j = 0;
-  let result = '';
+  let i = 0;
 
   const words: number[] = [];
   const asciiBitLength = ascii[lengthProperty] * 8;
