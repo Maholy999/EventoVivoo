@@ -1,20 +1,19 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import Link from 'next/link';
-import { getCurrentUser } from '@/lib/getCurrentUser';
+import { Suspense } from 'react';
+import { HeaderNav } from './components/HeaderNav';
 
 export const metadata: Metadata = {
   title: 'EventoVivo — Experiencias Universitarias en Vivo',
   description: 'Gestión inteligente de aforos, accesos QR y agendas universitarias en tiempo real.',
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
-
   return (
     <html lang="es">
       <body>
@@ -86,80 +85,9 @@ export default async function RootLayout({
               </div>
             </Link>
 
-            <nav style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              <Link
-                href="/"
-                style={{
-                  fontSize: '0.95rem',
-                  fontWeight: 600,
-                  color: 'var(--text-light)',
-                }}
-              >
-                Agenda
-              </Link>
-
-              {user?.role === 'organizer' && (
-                <Link
-                  href="/organizer"
-                  style={{
-                    fontSize: '0.95rem',
-                    fontWeight: 600,
-                    color: 'var(--primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <span
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: 'var(--primary)',
-                    }}
-                  />
-                  Panel Organizador
-                </Link>
-              )}
-
-              {user ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span
-                    style={{
-                      fontSize: '0.85rem',
-                      color: 'var(--text-muted)',
-                      padding: '4px 10px',
-                      background: 'rgba(255,255,255,0.05)',
-                      borderRadius: '6px',
-                    }}
-                  >
-                    {user.name || user.role}
-                  </span>
-                  <form action="/api/auth/logout" method="POST">
-                    <button
-                      type="submit"
-                      style={{
-                        background: 'transparent',
-                        color: 'var(--text-muted)',
-                        fontSize: '0.85rem',
-                        cursor: 'pointer',
-                        padding: '4px 8px',
-                      }}
-                    >
-                      Salir
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <Link
-                  href="/login"
-                  className="btn-primary"
-                  style={{ fontSize: '0.9rem', padding: '8px 16px' }}
-                >
-                  Ingresar
-                </Link>
-              )}
-            </nav>
+            <Suspense fallback={<div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando...</div>}>
+              <HeaderNav />
+            </Suspense>
           </div>
         </header>
 
