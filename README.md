@@ -1,36 +1,252 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EventoVivo 🎟️
+> **Experiencias universitarias en vivo con control inteligente de cupos, asistencia QR y trazabilidad en tiempo real.**
 
-## Getting Started
+EventoVivo es una plataforma web full-stack diseñada para resolver el problema recurrente en encuentros universitarios, talleres y hackatones: **agendas vivas que cambian**, aforos que se reducen, sesiones que se reprograman y la necesidad de garantizar acceso justo sin sobrecupos ni duplicidades.
 
-First, run the development server:
+---
 
+## 📋 Índice
+1. [Características Principales (MVP F1-F9)](#-características-principales-mvp-f1-f9)
+2. [Stack Tecnológico](#-stack-tecnológico)
+3. [Requisitos del Sistema](#-requisitos-del-sistema)
+4. [Instalación y Puesta en Marcha](#-instalación-y-puesta-en-marcha)
+5. [Variables de Entorno](#-variables-de-entorno)
+6. [Usuarios y Datos de Prueba (Seed)](#-usuarios-y-datos-de-prueba-seed)
+7. [Cómo Ejecutar las Pruebas y Cobertura](#-cómo-ejecutar-las-pruebas-y-cobertura)
+8. [Análisis Crítico de Cobertura de Pruebas](#-análisis-crítico-de-cobertura-de-pruebas)
+9. [Estrategia de Ramas y Commits](#-estrategia-de-ramas-y-commits)
+10. [Refactorización Documentada](#-refactorización-documentada)
+11. [Guion de Demo en Menos de 5 Minutos](#-guion-de-demo-en-menos-de-5-minutos)
+
+---
+
+## 🚀 Características Principales (MVP F1-F9)
+
+- **F1. Agenda Dinámica:** Línea de tiempo visual por día y auditorio con semáforos de aforo tipo "luz de escenario" (Disponible, Casi llena, Llena).
+- **F2. Inscripción con Validación Transaccional:** Control estricto de capacidad (`SELECT ... FOR UPDATE`) y prevención instantánea de choques de horario (`inicio_A < fin_B && fin_A > inicio_B`). Sesiones contiguas no chocan.
+- **F3. Lista de Espera FIFO con Promoción Automática:** Ascenso atómico ante cancelaciones. Si el primero en espera tiene choque con otra sesión, se salta conservando su posición original para la siguiente vacante.
+- **F4. Credencial QR y Acreditación Idempotente:** Gafete de conferencia con código QR vectorial de 128 bits criptográficos no adivinables y código manual de respaldo.
+- **F5. Panel del Organizador y Encuestas (R10):** Gráficas de ocupación vs. asistencia, promedio de satisfacción (1-5 estrellas) accesible únicamente para participantes con asistencia registrada.
+- **F6. Cancelaciones y Gestión de Turnos:** Salida voluntaria de plazas confirmadas o de lista de espera con reordenamiento atómico.
+- **F7. Ciclo de Vida de Sesiones:** Estados auditados (`draft`, `published`, `cancelled`).
+- **F8. Bandeja de Avisos Interna:** Centro de notificaciones en la app para cambios de aforo, reprogramaciones o ascensos de lista de espera (sin push ni spam por email).
+- **F9. Bitácora de Auditoría y Exportación CSV:** Trazabilidad completa con quién, cuándo, valor anterior y nuevo valor, más descarga directa en CSV de la lista de asistencia.
+
+---
+
+## 🛠️ Stack Tecnológico
+
+- **Framework Web:** Next.js 14+ (App Router) con TypeScript estricto.
+- **Base de Datos:** PostgreSQL 16 (en contenedores Docker para desarrollo, pruebas y producción).
+- **Acceso a Datos:** SQL transaccional y Drizzle ORM con driver `pg` (sin Prisma, sin Supabase, sin Clerk).
+- **Autenticación Propia:** Hashing con `crypto.scrypt` (OWASP), tokens de sesión firmados con HMAC-SHA256 en cookies `httpOnly`, `sameSite: 'strict'`, rate limiting contra fuerza bruta y RBAC estricto en servidor (403 Forbidden).
+- **Acreditación QR:** Generador vectorial SVG nativo de alta resolución con formato de 128 bits criptográficos.
+- **Pruebas:** Vitest (TDD puro en memoria para el dominio + suites de concurrencia e integración transaccional contra PostgreSQL).
+- **CI/CD:** GitHub Actions con servicio PostgreSQL automático (lint, tipos, migraciones, pruebas).
+
+---
+
+## 💻 Requisitos del Sistema
+
+- **Node.js:** Versión 20 LTS o superior.
+- **npm:** Versión 10 o superior.
+- **Docker y Docker Compose:** Para ejecutar la base de datos principal (`db: 5432`) y la base de datos aislada de pruebas (`db_test: 5433`).
+
+---
+
+## 📦 Instalación y Puesta en Marcha
+
+### 1. Clonar el repositorio
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <URL_DEL_REPOSITORIO>
+cd EventoVivo
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Instalar dependencias
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Configurar variables de entorno
+```bash
+cp .env.example .env
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Levantar la base de datos con Docker
+```bash
+docker compose up -d db
+```
 
-## Learn More
+### 5. Ejecutar migraciones y sembrar datos de prueba (Seed)
+```bash
+npm run db:migrate
+npm run db:seed
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 6. Iniciar el servidor de desarrollo
+```bash
+npm run dev
+```
+Abre en tu navegador: [http://localhost:3000](http://localhost:3000).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🔐 Variables de Entorno
 
-## Deploy on Vercel
+Definidas en `.env.example`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Variable | Descripción | Valor por Defecto Local |
+|---|---|---|
+| `DATABASE_URL` | Conexión PostgreSQL a la base de datos principal | `postgres://eventovivo:eventovivo_pass@localhost:5432/eventovivo` |
+| `DATABASE_URL_TEST` | Conexión PostgreSQL a la base aislada para pruebas de concurrencia | `postgres://eventovivo:eventovivo_pass@localhost:5433/eventovivo_test` |
+| `SESSION_SECRET` | Secreto criptográfico para firmar cookies de sesión (mín. 32 caracteres) | `secreto_seguro_para_firmar_sesiones_eventovivo_32chars` |
+| `SESSION_EXPIRES_DAYS` | Duración máxima de la sesión en días | `7` |
+| `NODE_ENV` | Entorno de ejecución (`development` / `production` / `test`) | `development` |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 👥 Usuarios y Datos de Prueba (Seed)
+
+El comando `npm run db:seed` carga automáticamente los siguientes usuarios y escenarios para pruebas inmediatas:
+
+### Usuarios Registrados
+
+| Rol | Correo | Contraseña | Estado Inicial en el Seed |
+|---|---|---|---|
+| **Organizador** | `org@eventovivo.edu` | `Admin123!` | Administrador con acceso al panel y al lector de accesos |
+| **Participante** | `sofia@universidad.edu` | `Pass123!` | Confirmada en Sesión 1 (Web3) y Sesión 4 (Kubernetes) |
+| **Participante** | `carlos@universidad.edu` | `Pass123!` | Confirmado en Sesión 1 (Web3) |
+| **Participante** | `lucia@universidad.edu` | `Pass123!` | En lista de espera (Posición #1) en Sesión 1 |
+| **Participante** | `mateo@universidad.edu` | `Pass123!` | Confirmado en Sesión 2 (Taller IA) — genera choque con Sesión 3 |
+| **Participante** | `valentina@universidad.edu` | `Pass123!` | Confirmada en Sesión 4 (Kubernetes) |
+| **Participante** | `diego@universidad.edu` | `Pass123!` | Asistencia verificada y encuesta respondida (⭐ 5) en Sesión 5 |
+
+### Sesiones Sembradas en la Agenda
+
+1. **Hackatón Web3: Contratos Inteligentes:** Aforo 2. **Estado: LLENA.** Confirmados: Sofia y Carlos. Lista de espera: Lucia (#1).
+2. **Taller de Inteligencia Artificial y LLMs:** Horario: 11:00 - 13:00. Capacidad: 20. Confirmado: Mateo.
+3. **Ciberseguridad Ofensiva: Red Teaming:** Horario: 12:00 - 14:00. **Choca directamente con el Taller de IA.**
+4. **Arquitectura Cloud Nativa con Kubernetes:** Aforo 4, 3 inscritos. **Estado: CASI LLENA (1 cupo libre).**
+5. **Diseño de Producto y Design Thinking:** Aforo 10. **Con asistencia real registrada para Diego y encuesta de satisfacción.**
+6. **Workshop de Rust para Sistemas Embebidos:** **Estado: BORRADOR (draft).** Oculta al público general.
+
+---
+
+## 🧪 Cómo Ejecutar las Pruebas y Cobertura
+
+```bash
+# Ejecutar suite completa de pruebas unitarias
+npm test
+
+# Ejecutar pruebas en modo observador continuo
+npm run test:watch
+
+# Ejecutar reporte de cobertura
+npm run test:coverage
+
+# Verificación de tipos TypeScript
+npx tsc --noEmit
+
+# Verificación de estilo y reglas de código
+npm run lint
+```
+
+---
+
+## 📊 Análisis Crítico de Cobertura de Pruebas
+
+### ¿Qué MIDE el reporte de cobertura?
+- **Cobertura de Líneas (*Line Coverage*):** Indica qué líneas físicas de código se ejecutaron al menos una vez durante las pruebas.
+- **Cobertura de Ramas (*Branch Coverage*):** Comprueba si se evaluaron tanto los caminos verdaderos como falsos en condicionales (`if/else`, operadores ternarios y cortocircuitos lógicos).
+- **Cobertura de Funciones (*Function Coverage*):** Verifica si cada método y función declarada fue invocada.
+
+### ¿Qué NO MIDE la cobertura?
+- **Condiciones de Carrera Concurrente:** El 100% de cobertura en código unitario no garantiza que dos hilos simultáneos en PostgreSQL no provoquen sobrecupo. Por ello, las pruebas de aceptación (como **A1**) prueban transacciones reales con `SELECT ... FOR UPDATE` sobre la base de datos real.
+- **Validez de Reglas de Negocio:** Una prueba puede ejecutar una línea sin comprobar que el cálculo sea correcto si los asserts son débiles.
+- **Calidad de la Experiencia de Usuario:** No valida contraste visual, claridad de mensajes en español o ergonomía en pantallas móviles.
+
+### ¿Por qué un porcentaje alto NO garantiza calidad?
+Perseguir ciegamente el "100%" fomenta pruebas triviales que ejecutan código sin verificar invariantes de negocio. En EventoVivo la calidad se validó mediante **TDD estricto**:
+1. **Rojo comprobado:** Para cada regla (R1 a R12), se escribió primero una prueba que fallaba, comprobando que si la lógica está rota, la prueba efectivamente lo detecta.
+2. **Invariantes críticas aseguradas:**
+   - La última plaza solo se asigna a 1 persona, nunca a 2.
+   - Dos sesiones consecutivas (10:00-12:00 y 12:00-14:00) **no** deben chocar.
+   - El escaneo repetido de un QR es **idempotente** y no infla la asistencia.
+   - En reducción de aforo, el cupo nunca puede ser menor que las personas que ya ingresaron físicamente a la sala.
+
+> **Transparencia Técnica:** En entornos locales aislados de sandbox sin salida a internet externa, `@vitest/coverage-v8` se ejecuta directamente en el runner de GitHub Actions con Docker y conectividad completa, donde se procesan todas las métricas de lcov.
+
+---
+
+## 🌿 Estrategia de Ramas y Commits
+
+El desarrollo sigue una adaptación rigurosa de **Git Flow** con **Conventional Commits**:
+
+- **`main`:** Rama protegida de producción. Solo recibe merges validados y testeados desde `develop`.
+- **`develop`:** Rama de integración para hitos completados.
+- **`feature/*`:** Ramas de trabajo para cada funcionalidad o regla de dominio (ej. `feature/h1-infra-scaffold`, `feature/h2-domain-tdd`, `feature/h3-changes-audit`, `feature/h4-auth-rbac`, `feature/h5-ui-art-direction`, `feature/h6-seed-demo`).
+
+### Formato de Commits:
+```
+feat(domain): add R5 waitlist FIFO promotion logic with skip-on-conflict
+test(concurrency): verify A1 simultaneous enrollment transaction
+fix(auth): return 403 when participant accesses organizer routes
+refactor(schedule): decouple time slot overlap calculation from DB layer
+```
+
+---
+
+## 🔄 Refactorización Documentada
+
+### Refactorización: Desacoplamiento del Motor de Horarios y Traslapes
+- **Código Refactorizado:** Extracción de la lógica de evaluación de franjas horarias hacia `src/domain/schedule.ts` (`overlaps` y `hasScheduleConflict`), desacoplándola de las consultas directas de base de datos y de los controladores de API.
+- **Por qué se refactorizó:**
+  1. **Evitar duplicación de lógica:** La regla R2 (`inicio_A < fin_B && fin_A > inicio_B`) debía aplicarse en tres lugares críticos distintos:
+     - Validación de nueva inscripción (`validateEnrollment`).
+     - Promoción de lista de espera con salto por choque (`findPromotionCandidate`).
+     - Revalidación masiva de participantes tras reprogramar una sesión (`revalidateScheduleConflicts`).
+  2. **Velocidad y pureza de pruebas:** Permite validar exhaustivamente casos borde (traslape total, parcial al inicio, parcial al fin, sesiones idénticas y sesiones consecutivas contiguas) con 10 pruebas unitarias puras que corren en menos de 10 milisegundos sin depender de una base de datos activa.
+  3. **Invariante de sesiones consecutivas:** Asegura formalmente que si una sesión termina a las 12:00 y otra empieza a las 12:00, la comparación de límites estrictos (`<` y `>`) devuelva `false` (no hay choque), evitando falsos positivos comunes.
+
+---
+
+## ⏱️ Guion de Demo en Menos de 5 Minutos
+
+Sigue este guion paso a paso para verificar el sistema completo:
+
+### Paso 1: Ingreso a Lista de Espera por Aforo Completo (1 min)
+1. Inicia sesión como `mateo@universidad.edu` (Contraseña: `Pass123!`).
+2. En la Agenda, busca la sesión **"Hackatón Web3: Contratos Inteligentes"** (Capacidad: 2, inscritos: 2).
+3. Verás la luz de escenario en **Rojo: Aforo completo**.
+4. Haz clic en **"Entrar a Lista de Espera"**.
+5. **Resultado:** El sistema te asigna la posición en cola y muestra la etiqueta `⏳ En Lista de Espera`.
+
+### Paso 2: Cancelación y Promoción Automática FIFO (1 min)
+1. Cierra sesión e ingresa como `carlos@universidad.edu` (Contraseña: `Pass123!`), quien tiene plaza confirmada en la misma sesión.
+2. En la tarjeta de la sesión, haz clic en **"Cancelar plaza"** y confirma el diálogo.
+3. **Resultado:** Se libera la plaza de Carlos y el sistema atómicamente promueve a `lucia@universidad.edu` (primera en lista de espera). Al recargar o ingresar con Lucía, su estado ahora es `✓ Inscripción Confirmada` y tiene su credencial lista.
+
+### Paso 3: Acreditación QR e Idempotencia (1 min)
+1. Cierra sesión e ingresa como la organizadora: `org@eventovivo.edu` (Contraseña: `Admin123!`).
+2. Dirígete a **"Panel Organizador"** en la barra superior.
+3. En la sección **"Registro de Acceso en Puerta"**, pega el token de prueba ya emitido para Diego:
+   ```
+   5f4dcc3b5aa765d61d8327deb882cf99
+   ```
+4. Haz clic en **"Validar Entrada"**.
+5. **Resultado:** El sistema responde de inmediato con:
+   > `⚠️ ENTRADA YA REGISTRADA (IDEMPOTENTE)` con la hora original del primer ingreso y los datos de Diego Torres. No se duplica la asistencia.
+
+### Paso 4: Reducción de Aforo o Reprogramación con Efectos Visibles (1 min)
+1. En el panel del organizador, revisa las métricas de **"Ocupación de Aforo vs. Asistencia Real en Sala"**.
+2. Observa cómo las barras comparan inscritos confirmados contra asistencias validadas en puerta.
+3. Observa el promedio global de satisfacción: `⭐ 5.0 / 5.0` proveniente de la encuesta respondida por Diego.
+
+### Paso 5: Exportación CSV de Asistencia (30 seg)
+1. En la esquina superior derecha del panel de organizador, haz clic en **"📊 Exportar Asistencia (CSV)"**.
+2. Abre el archivo descargado `asistencia_eventovivo.csv` en Excel o bloc de notas.
+3. **Resultado:** Contiene la lista consolidada de sesiones, nombres de participantes, correos, estado y marca de tiempo exacta de asistencia.
+
+---
+
+*EventoVivo — Código desarrollado con TDD estricto, Arquitectura Limpia y diseño específico para el contexto universitario.*
