@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -9,7 +10,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'participant' | 'organizer'>('participant');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,9 +19,8 @@ export default function LoginPage() {
     setError(null);
 
     const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login';
-    const payload = isRegister
-      ? { email, password, name, role }
-      : { email, password };
+    // R15: El registro público crea exclusivamente participantes
+    const payload = isRegister ? { email, password, name } : { email, password };
 
     try {
       const res = await fetch(endpoint, {
@@ -33,10 +32,10 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Ocurrió un error');
+        setError(data.error || 'Ocurrió un error al procesar la solicitud');
       } else {
         if (isRegister) {
-          // Iniciar sesión automáticamente tras registro
+          // Autenticar tras registro
           const loginRes = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -47,7 +46,7 @@ export default function LoginPage() {
             router.refresh();
           } else {
             setIsRegister(false);
-            setError('Usuario registrado. Por favor inicia sesión.');
+            setError('Cuenta creada exitosamente. Por favor, inicia sesión.');
           }
         } else {
           router.push('/');
@@ -55,31 +54,54 @@ export default function LoginPage() {
         }
       }
     } catch {
-      setError('Error de conexión al autenticar');
+      setError('Error de conexión con el servidor de autenticación');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="container" style={{ maxWidth: '440px', padding: '40px 20px' }}>
+    <main className="container" style={{ maxWidth: '420px', padding: '40px 16px 80px' }}>
+      <div style={{ marginBottom: '16px' }}>
+        <Link
+          href="/"
+          style={{
+            fontSize: '12px',
+            color: 'var(--tinta)',
+            fontWeight: 600,
+            textDecoration: 'underline',
+          }}
+        >
+          ← Volver a Explorar eventos
+        </Link>
+      </div>
+
       <div
         style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '30px',
-          boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+          backgroundColor: 'var(--papel)',
+          border: '2px solid var(--tinta)',
+          padding: '28px',
         }}
       >
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <h1 className="font-display" style={{ fontSize: '1.8rem', fontWeight: 700 }}>
-            {isRegister ? 'Registro en EventoVivo' : 'Acceso al Campus'}
+        <div style={{ marginBottom: '20px' }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              color: 'var(--tinta-suave)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}
+          >
+            Acceso al Campus Universitario
+          </span>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, margin: '4px 0 0' }}>
+            {isRegister ? 'Registro de Participante' : 'Iniciar sesión'}
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', marginTop: '4px' }}>
+          <p style={{ color: 'var(--tinta-suave)', fontSize: '13px', marginTop: '4px' }}>
             {isRegister
-              ? 'Crea tu cuenta para inscribirte o gestionar eventos'
-              : 'Ingresa con tu correo y contraseña institucional'}
+              ? 'Crea tu cuenta institucional para inscribirte en talleres y obtener tu credencial QR.'
+              : 'Ingresa con tu correo universitario y contraseña.'}
           </p>
         </div>
 
@@ -88,23 +110,23 @@ export default function LoginPage() {
             role="alert"
             style={{
               padding: '10px 14px',
-              borderRadius: '8px',
-              background: 'rgba(231, 76, 60, 0.15)',
-              border: '1px solid var(--accent-red)',
-              color: 'var(--accent-red)',
-              fontSize: '0.88rem',
-              marginBottom: '18px',
+              backgroundColor: '#FFF5F2',
+              border: '1px solid var(--senal)',
+              color: 'var(--senal)',
+              fontSize: '12px',
+              fontWeight: 600,
+              marginBottom: '16px',
             }}
           >
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {isRegister && (
             <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-                Nombre completo
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>
+                Nombre completo *
               </label>
               <input
                 type="text"
@@ -114,97 +136,77 @@ export default function LoginPage() {
                 placeholder="Ej. Sofia Reyes"
                 style={{
                   width: '100%',
-                  background: 'var(--bg-main)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  color: 'var(--text-light)',
-                  fontSize: '0.92rem',
+                  padding: '8px 12px',
+                  border: '1px solid var(--tinta)',
+                  fontSize: '13px',
                 }}
               />
             </div>
           )}
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-              Correo electrónico
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>
+              Correo electrónico *
             </label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="usuario@universidad.edu"
+              placeholder="tu.usuario@universidad.edu"
               style={{
                 width: '100%',
-                background: 'var(--bg-main)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                color: 'var(--text-light)',
-                fontSize: '0.92rem',
+                padding: '8px 12px',
+                border: '1px solid var(--tinta)',
+                fontSize: '13px',
               }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-              Contraseña
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>
+              Contraseña *
             </label>
             <input
               type="password"
               required
-              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               style={{
                 width: '100%',
-                background: 'var(--bg-main)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                color: 'var(--text-light)',
-                fontSize: '0.92rem',
+                padding: '8px 12px',
+                border: '1px solid var(--tinta)',
+                fontSize: '13px',
               }}
             />
           </div>
 
           {isRegister && (
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>
-                Tipo de Rol
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as 'participant' | 'organizer')}
-                style={{
-                  width: '100%',
-                  background: 'var(--bg-main)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  color: 'var(--text-light)',
-                  fontSize: '0.92rem',
-                }}
-              >
-                <option value="participant">Participante (estudiante, docente)</option>
-                <option value="organizer">Organizador (control de aforo y asistencia)</option>
-              </select>
+            <div
+              style={{
+                backgroundColor: 'var(--papel-calido)',
+                border: '1px solid var(--linea)',
+                padding: '8px 12px',
+                fontSize: '11px',
+                color: 'var(--tinta-suave)',
+              }}
+            >
+              ℹ️ <strong>Regla R15:</strong> El registro público crea cuentas de participante. Los organizadores son dados de alta por el administrador del evento mediante el seed o CLI.
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="btn-primary"
-            style={{ width: '100%', padding: '12px', marginTop: '8px', fontSize: '0.95rem' }}
+            className="btn-senal"
+            style={{ width: '100%', padding: '10px', fontSize: '13px', marginTop: '6px' }}
           >
-            {loading ? 'Procesando...' : isRegister ? 'Crear Cuenta' : 'Iniciar Sesión'}
+            {loading ? 'Verificando…' : isRegister ? 'Registrarme' : 'Ingresar al sistema'}
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--linea)', textAlign: 'center' }}>
           <button
             type="button"
             onClick={() => {
@@ -212,19 +214,39 @@ export default function LoginPage() {
               setError(null);
             }}
             style={{
-              background: 'transparent',
-              color: 'var(--primary)',
-              fontSize: '0.88rem',
+              background: 'none',
+              border: 'none',
+              color: 'var(--tinta)',
+              fontSize: '12px',
+              textDecoration: 'underline',
               cursor: 'pointer',
-              fontWeight: 600,
             }}
           >
             {isRegister
-              ? '¿Ya tienes una cuenta? Inicia sesión'
-              : '¿No tienes cuenta? Regístrate aquí'}
+              ? '¿Ya tienes una cuenta? Inicia sesión aquí'
+              : '¿No tienes cuenta? Regístrate como participante'}
           </button>
         </div>
+
+        {/* Cuentas de demostración rápida */}
+        <div
+          style={{
+            marginTop: '20px',
+            backgroundColor: 'var(--papel-calido)',
+            border: '1px solid var(--linea)',
+            padding: '12px',
+            fontSize: '11px',
+          }}
+        >
+          <strong style={{ display: 'block', marginBottom: '4px' }}>Usuarios de prueba documentados:</strong>
+          <div>
+            Organizador: <code style={{ fontFamily: 'var(--font-mono)' }}>org1@eventovivo.edu</code> / <code style={{ fontFamily: 'var(--font-mono)' }}>Admin123!</code>
+          </div>
+          <div>
+            Participante: <code style={{ fontFamily: 'var(--font-mono)' }}>participante1@universidad.edu</code> / <code style={{ fontFamily: 'var(--font-mono)' }}>Pass123!</code>
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }

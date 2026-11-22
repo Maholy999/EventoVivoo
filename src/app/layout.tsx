@@ -1,12 +1,26 @@
 import type { Metadata } from 'next';
+import { Bricolage_Grotesque, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { HeaderNav } from './components/HeaderNav';
 
+const bricolage = Bricolage_Grotesque({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-bricolage',
+});
+
+const ibmMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-ibm-mono',
+});
+
 export const metadata: Metadata = {
-  title: 'EventoVivo — Experiencias Universitarias en Vivo',
-  description: 'Gestión inteligente de aforos, accesos QR y agendas universitarias en tiempo real.',
+  title: 'EventoVivo — Programa Oficial del Evento Universitario',
+  description: 'Programa en vivo, control inteligente de cupos, asistencia QR y acreditación instantánea.',
 };
 
 export default function RootLayout({
@@ -15,12 +29,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es">
-      <body>
+    <html lang="es" className={`${bricolage.variable} ${ibmMono.variable}`}>
+      <body style={{ backgroundColor: 'var(--papel)', color: 'var(--tinta)' }}>
         <header
           style={{
-            background: 'var(--surface)',
-            borderBottom: '1px solid var(--border)',
+            backgroundColor: 'var(--papel)',
+            borderBottom: '2px solid var(--tinta)',
             position: 'sticky',
             top: 0,
             zIndex: 50,
@@ -32,7 +46,7 @@ export default function RootLayout({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              height: '70px',
+              height: '64px',
             }}
           >
             <Link
@@ -40,73 +54,86 @@ export default function RootLayout({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '8px',
                 textDecoration: 'none',
               }}
             >
               <div
                 style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '8px',
-                  background: 'var(--primary)',
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: 'var(--tinta)',
+                  color: 'var(--papel)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontWeight: 900,
-                  color: 'var(--bg-main)',
-                  fontSize: '1.2rem',
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  borderRadius: '2px',
                 }}
               >
                 EV
               </div>
-              <div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span
-                  className="font-display"
                   style={{
-                    fontSize: '1.25rem',
-                    fontWeight: 700,
-                    color: 'var(--text-light)',
+                    fontSize: '18px',
+                    fontWeight: 800,
+                    letterSpacing: '-0.02em',
+                    lineHeight: 1.1,
                   }}
                 >
-                  Evento<span style={{ color: 'var(--primary)' }}>Vivo</span>
+                  EventoVivo
                 </span>
                 <span
                   style={{
-                    display: 'block',
-                    fontSize: '0.7rem',
-                    color: 'var(--text-muted)',
-                    letterSpacing: '0.08em',
+                    fontSize: '10px',
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--tinta-suave)',
                     textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
                   }}
                 >
-                  Campus Conectado
+                  Programa Oficial
                 </span>
               </div>
             </Link>
 
-            <Suspense fallback={<div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando...</div>}>
+            <Suspense fallback={<div style={{ height: '36px', width: '240px' }} />}>
               <HeaderNav />
             </Suspense>
           </div>
         </header>
 
-        <main style={{ minHeight: 'calc(100vh - 140px)', padding: '30px 0' }}>
-          {children}
-        </main>
+        {children}
 
         <footer
           style={{
-            background: 'var(--surface)',
-            borderTop: '1px solid var(--border)',
+            backgroundColor: 'var(--papel-calido)',
+            borderTop: '1px solid var(--linea)',
             padding: '24px 0',
-            textAlign: 'center',
-            fontSize: '0.85rem',
-            color: 'var(--text-muted)',
+            marginTop: '40px',
+            fontSize: '12px',
+            color: 'var(--tinta-suave)',
           }}
         >
-          <div className="container">
-            EventoVivo &copy; 2026 &mdash; Experiencias universitarias con control de aforo y acceso QR en vivo.
+          <div
+            className="container"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+            }}
+          >
+            <div>
+              <strong>EventoVivo</strong> · Programa impreso en vivo con control atómico de aforos y acreditación QR.
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)' }}>
+              Acceso universitario sin sobrecupos · 2026
+            </div>
           </div>
         </footer>
       </body>

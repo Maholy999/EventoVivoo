@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
       entity_id: newSession.id,
       action: 'session_created',
       changed_by: user.id,
+      previous_value: null,
       new_value: {
         title: newSession.title,
         type: newSession.type,

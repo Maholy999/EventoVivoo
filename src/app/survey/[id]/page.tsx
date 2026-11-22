@@ -4,6 +4,11 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+/**
+ * Encuesta de Satisfacción según R10 y R18:
+ * - Solo se ofrece si el participante tiene asistencia registrada (verificado en servidor con 403).
+ * - Opcional, calificación 1 a 5 y comentario.
+ */
 export default function SurveyPage() {
   const params = useParams();
   const enrollmentId = params?.id as string;
@@ -47,106 +52,114 @@ export default function SurveyPage() {
   };
 
   return (
-    <div className="container" style={{ maxWidth: '520px', padding: '30px 20px' }}>
+    <main className="container" style={{ maxWidth: '480px', padding: '30px 16px 80px' }}>
       <div style={{ marginBottom: '16px' }}>
-        <Link href="/" style={{ color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 600 }}>
-          &larr; Volver a la Agenda
+        <Link
+          href="/"
+          style={{
+            fontSize: '12px',
+            color: 'var(--tinta)',
+            fontWeight: 600,
+            textDecoration: 'underline',
+          }}
+        >
+          ← Volver a Explorar eventos
         </Link>
       </div>
 
       <div
         style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '30px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          backgroundColor: 'var(--papel)',
+          border: '2px solid var(--tinta)',
+          padding: '24px',
         }}
       >
         <span
           style={{
-            fontSize: '0.75rem',
-            color: 'var(--primary)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--tinta-suave)',
             fontWeight: 700,
             textTransform: 'uppercase',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.08em',
           }}
         >
-          Evaluación de la Experiencia (R10)
+          Evaluación de la Experiencia (R10, R18)
         </span>
-        <h1 className="font-display" style={{ fontSize: '1.6rem', fontWeight: 700, margin: '6px 0 16px' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: 800, margin: '4px 0 12px' }}>
           Encuesta de Satisfacción
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '24px' }}>
-          Tu retroalimentación nos ayuda a mejorar los próximos talleres y hackatones universitarios.
+        <p style={{ color: 'var(--tinta-suave)', fontSize: '13px', lineHeight: 1.4, marginBottom: '20px' }}>
+          Solo los asistentes verificados pueden enviar su retroalimentación para ayudarnos a calibrar las próximas sesiones universitarias.
         </p>
 
         {message && (
           <div
             role="alert"
             style={{
-              padding: '12px 16px',
-              borderRadius: '8px',
-              fontSize: '0.9rem',
+              padding: '12px 14px',
+              fontSize: '13px',
               marginBottom: '20px',
-              background: message.isError ? 'rgba(231, 76, 60, 0.15)' : 'rgba(72, 229, 194, 0.15)',
-              border: `1px solid ${message.isError ? 'var(--accent-red)' : 'var(--primary)'}`,
-              color: message.isError ? 'var(--accent-red)' : 'var(--primary)',
+              backgroundColor: message.isError ? '#FFF5F2' : '#F4FBF7',
+              border: `1px solid ${message.isError ? 'var(--senal)' : 'var(--estado-disponible)'}`,
+              color: message.isError ? 'var(--senal)' : 'var(--estado-disponible)',
+              fontWeight: 600,
             }}
           >
             {message.text}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px' }}>
-              Calificación General (1 a 5 estrellas):
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
+              Calificación general *
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
-                  key={star}
                   type="button"
+                  key={star}
                   onClick={() => setRating(star)}
                   style={{
-                    background: rating >= star ? 'var(--primary)' : 'var(--surface-card)',
-                    color: rating >= star ? 'var(--bg-main)' : 'var(--text-muted)',
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '8px',
-                    fontSize: '1.2rem',
+                    flex: 1,
+                    padding: '10px 0',
+                    border: '1px solid var(--tinta)',
+                    backgroundColor: rating >= star ? 'var(--tinta)' : 'var(--papel)',
+                    color: rating >= star ? '#FFFFFF' : 'var(--tinta)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '14px',
                     fontWeight: 700,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    borderRadius: '2px',
                   }}
                 >
                   ★ {star}
                 </button>
               ))}
             </div>
+            <span style={{ display: 'block', fontSize: '11px', color: 'var(--tinta-suave)', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
+              1 = Muy insatisfecho · 5 = Excelente
+            </span>
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px' }}>
-              Comentario opcional:
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
+              Comentario u observaciones (opcional)
             </label>
             <textarea
               rows={4}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="¿Qué te pareció el contenido, la dinámica y el instructor?"
+              placeholder="¿Qué te pareció el contenido, la dinámica y el ponente?..."
               style={{
                 width: '100%',
-                background: 'var(--bg-main)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                padding: '12px',
-                color: 'var(--text-light)',
-                fontSize: '0.9rem',
-                fontFamily: 'inherit',
-                resize: 'vertical',
+                padding: '10px',
+                border: '1px solid var(--tinta)',
+                fontSize: '13px',
+                backgroundColor: 'var(--papel)',
+                color: 'var(--tinta)',
+                lineHeight: 1.4,
               }}
             />
           </div>
@@ -154,13 +167,13 @@ export default function SurveyPage() {
           <button
             type="submit"
             disabled={loading}
-            className="btn-primary"
-            style={{ padding: '12px', fontSize: '1rem', width: '100%' }}
+            className="btn-senal"
+            style={{ width: '100%', padding: '12px', fontSize: '14px' }}
           >
-            {loading ? 'Enviando...' : 'Enviar Encuesta'}
+            {loading ? 'Enviando…' : 'Enviar evaluación'}
           </button>
         </form>
       </div>
-    </div>
+    </main>
   );
 }

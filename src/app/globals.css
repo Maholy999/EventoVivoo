@@ -1,20 +1,23 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
-
 :root {
-  --bg-main: #0B132B;
-  --surface: #1C2541;
-  --surface-card: #222F55;
-  --primary: #48E5C2;
-  --primary-hover: #36c5a5;
-  --accent-amber: #F39C12;
-  --accent-red: #E74C3C;
-  --text-light: #F8F9FA;
-  --text-muted: #95A5A6;
-  --border: #2C3E6B;
-  --border-focus: #48E5C2;
+  /* Concepto: "Programa impreso de un evento en vivo" */
+  --papel: #FFFFFF;
+  --papel-calido: #F6F3EE;
+  --tinta: #16130F;
+  --tinta-suave: #5E584F;
+  --linea: #DDD7CC;
+  --senal: #E8440F; /* Único acento bermellón */
 
-  --font-display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
-  --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  /* Estados de sesión */
+  --estado-disponible: #1E6B4F;
+  --estado-casi-llena: #B7700B;
+  --estado-llena: #16130F;
+  --estado-espera: #5E584F;
+  --estado-inscrito: #E8440F;
+  --estado-cancelada: #8A8378;
+  --estado-borrador: #8A8378;
+
+  --font-sans: var(--font-bricolage, system-ui, -apple-system, sans-serif);
+  --font-mono: var(--font-ibm-mono, 'Courier New', Courier, monospace);
 }
 
 * {
@@ -23,18 +26,24 @@
   padding: 0;
 }
 
-body {
-  background-color: var(--bg-main);
-  color: var(--text-light);
-  font-family: var(--font-body);
+html, body {
+  background-color: var(--papel);
+  color: var(--tinta);
+  font-family: var(--font-sans);
   line-height: 1.5;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, h4, .font-display {
-  font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  font-family: var(--font-sans);
+  letter-spacing: -0.015em;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.mono {
+  font-family: var(--font-mono);
 }
 
 a {
@@ -47,164 +56,160 @@ button {
   cursor: pointer;
   border: none;
   outline: none;
-  transition: all 0.2s ease-in-out;
 }
 
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 2px solid var(--border-focus);
+/* Foco accesible obligatorio con --senal */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--senal);
   outline-offset: 2px;
 }
 
-/* Semáforo de aforo / Luz de escenario */
-.stage-light {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 4px 10px;
-  border-radius: 9999px;
-}
-
-.stage-light-green {
-  background: rgba(72, 229, 194, 0.12);
-  color: var(--primary);
-  border: 1px solid rgba(72, 229, 194, 0.4);
-}
-
-.stage-light-green::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--primary);
-  box-shadow: 0 0 8px var(--primary);
-}
-
-.stage-light-amber {
-  background: rgba(243, 156, 18, 0.12);
-  color: var(--accent-amber);
-  border: 1px solid rgba(243, 156, 18, 0.4);
-}
-
-.stage-light-amber::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--accent-amber);
-  box-shadow: 0 0 8px var(--accent-amber);
-}
-
-.stage-light-red {
-  background: rgba(231, 76, 60, 0.12);
-  color: var(--accent-red);
-  border: 1px solid rgba(231, 76, 60, 0.4);
-}
-
-.stage-light-red::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--accent-red);
-  box-shadow: 0 0 8px var(--accent-red);
-}
-
-/* Credencial / Gafete de conferencia */
-.credential-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-  position: relative;
-}
-
-.lanyard-hole {
-  width: 60px;
-  height: 10px;
-  background: var(--bg-main);
-  border: 2px solid var(--border);
-  border-radius: 9999px;
-  margin: 16px auto 0;
-}
-
-.ticket-divider {
-  position: relative;
-  border-top: 2px dashed var(--border);
-  margin: 20px 0;
-}
-
-.ticket-divider::before,
-.ticket-divider::after {
-  content: '';
-  position: absolute;
-  top: -12px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--bg-main);
-}
-
-.ticket-divider::before {
-  left: -24px;
-}
-
-.ticket-divider::after {
-  right: -24px;
-}
-
-/* Contenedores y utilidades */
 .container {
-  max-width: 1100px;
+  width: 100%;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 16px;
 }
 
-.btn-primary {
-  background: var(--primary);
-  color: var(--bg-main);
-  font-weight: 700;
-  padding: 10px 18px;
-  border-radius: 8px;
+/* Botón de señal principal (único acento bermellón) */
+.btn-senal {
+  background-color: var(--senal);
+  color: #FFFFFF;
+  border: 1px solid var(--senal);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 2px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.btn-primary:hover {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
+.btn-senal:hover {
+  background-color: #D33B0A;
 }
 
-.btn-secondary {
-  background: var(--surface);
-  color: var(--text-light);
-  border: 1px solid var(--border);
+/* Botón secundario en tinta */
+.btn-tinta {
+  background-color: var(--tinta);
+  color: #FFFFFF;
+  border: 1px solid var(--tinta);
+  padding: 8px 16px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 10px 18px;
-  border-radius: 8px;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-.btn-secondary:hover {
-  background: var(--surface-card);
-  border-color: var(--primary);
+.btn-tinta:hover {
+  background-color: #2B2620;
 }
 
-.btn-danger {
-  background: rgba(231, 76, 60, 0.15);
-  color: var(--accent-red);
-  border: 1px solid var(--accent-red);
+/* Botón contorno sobre papel */
+.btn-outline {
+  background-color: var(--papel);
+  color: var(--tinta);
+  border: 1px solid var(--tinta);
+  padding: 8px 16px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-.btn-danger:hover {
-  background: var(--accent-red);
-  color: #fff;
+.btn-outline:hover {
+  background-color: var(--papel-calido);
+}
+
+/* Etiquetas de estado de sesión según la Dirección de Arte */
+.tag-disponible {
+  border: 1px solid var(--estado-disponible);
+  color: var(--estado-disponible);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.tag-casi-llena {
+  border: 2px solid var(--estado-casi-llena);
+  color: var(--estado-casi-llena);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.tag-llena {
+  background-color: var(--estado-llena);
+  color: #FFFFFF;
+  border: 1px solid var(--estado-llena);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.tag-espera {
+  border: 1px dashed var(--estado-espera);
+  color: var(--estado-espera);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.tag-inscrito {
+  background-color: var(--estado-inscrito);
+  color: #FFFFFF;
+  border: 1px solid var(--estado-inscrito);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.tag-cancelada {
+  border: 1px solid var(--estado-cancelada);
+  color: var(--estado-cancelada);
+  text-decoration: line-through;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.tag-borrador {
+  border: 1px dashed var(--estado-borrador);
+  color: var(--estado-borrador);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
 }

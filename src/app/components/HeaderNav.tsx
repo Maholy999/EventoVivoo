@@ -5,25 +5,43 @@ export async function HeaderNav() {
   const user = await getCurrentUser();
 
   return (
-    <nav style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+    <nav style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      {/* Nombres finales sección 3: "Explorar eventos" y "Programa del día" */}
       <Link
         href="/"
         style={{
-          fontSize: '0.95rem',
+          fontSize: '13px',
           fontWeight: 600,
-          color: 'var(--text-light)',
+          color: 'var(--tinta)',
+          padding: '4px 8px',
         }}
       >
-        Agenda
+        Explorar eventos
       </Link>
 
+      <Link
+        href="/#programa"
+        style={{
+          fontSize: '13px',
+          fontWeight: 600,
+          color: 'var(--tinta)',
+          padding: '4px 8px',
+        }}
+      >
+        Programa del día
+      </Link>
+
+      {/* Si es Organizador: interfaz propia (R13) */}
       {user?.role === 'organizer' && (
         <Link
           href="/organizer"
           style={{
-            fontSize: '0.95rem',
-            fontWeight: 600,
-            color: 'var(--primary)',
+            fontSize: '13px',
+            fontWeight: 700,
+            color: '#FFFFFF',
+            backgroundColor: 'var(--tinta)',
+            padding: '6px 12px',
+            borderRadius: '2px',
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
@@ -31,38 +49,70 @@ export async function HeaderNav() {
         >
           <span
             style={{
-              width: '8px',
-              height: '8px',
+              width: '6px',
+              height: '6px',
+              backgroundColor: 'var(--senal)',
               borderRadius: '50%',
-              background: 'var(--primary)',
             }}
           />
-          Panel Organizador
+          Operación en vivo
         </Link>
       )}
 
-      {user ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span
+      {/* Si es Participante */}
+      {user && user.role !== 'organizer' && (
+        <>
+          <Link
+            href="/#mis-inscripciones"
             style={{
-              fontSize: '0.85rem',
-              color: 'var(--text-muted)',
-              padding: '4px 10px',
-              background: 'rgba(255,255,255,0.05)',
-              borderRadius: '6px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--tinta)',
+              padding: '4px 8px',
             }}
           >
-            {user.name || user.role}
+            Mis inscripciones
+          </Link>
+          <Link
+            href="/#avisos"
+            style={{
+              fontSize: '13px',
+              fontWeight: 600,
+              color: 'var(--tinta)',
+              padding: '4px 8px',
+            }}
+          >
+            Avisos
+          </Link>
+        </>
+      )}
+
+      {user ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--tinta-suave)',
+              backgroundColor: 'var(--papel-calido)',
+              border: '1px solid var(--linea)',
+              padding: '3px 8px',
+              borderRadius: '2px',
+            }}
+          >
+            {user.name} ({user.role === 'organizer' ? 'Organizador' : 'Participante'})
           </span>
           <form action="/api/auth/logout" method="POST">
             <button
               type="submit"
               style={{
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                fontSize: '0.85rem',
+                background: 'none',
+                border: 'none',
+                color: 'var(--tinta-suave)',
+                fontSize: '12px',
                 cursor: 'pointer',
-                padding: '4px 8px',
+                textDecoration: 'underline',
+                padding: '4px',
               }}
             >
               Salir
@@ -72,10 +122,10 @@ export async function HeaderNav() {
       ) : (
         <Link
           href="/login"
-          className="btn-primary"
-          style={{ fontSize: '0.9rem', padding: '8px 16px' }}
+          className="btn-senal"
+          style={{ fontSize: '13px', padding: '6px 14px' }}
         >
-          Ingresar
+          Iniciar sesión
         </Link>
       )}
     </nav>
