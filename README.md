@@ -200,6 +200,10 @@ El desarrollo sigue una adaptación rigurosa de **Git Flow** con **Conventional 
 - **`main`:** Rama protegida de producción. Solo recibe merges validados y testeados desde `develop`.
 - **`develop`:** Rama de integración para hitos completados.
 - **`feature/*`:** Ramas de trabajo para cada funcionalidad o regla de dominio (ej. `feature/h1-infra-scaffold`, `feature/h2-domain-tdd`, `feature/h3-changes-audit`, `feature/h4-auth-rbac`, `feature/h5-ui-art-direction`, `feature/h6-seed-demo`).
+- **`fix/*`:** Ramas para correcciones verificadas con una prueba que reproduzca el defecto.
+- **`docs/*`:** Ramas para documentación, instrucciones de ejecución o cambios de configuración CI.
+
+Todo cambio debe llegar a `main` mediante una solicitud de incorporación dirigida a `develop` o `main`. GitHub Actions debe confirmar instalaciones, pruebas, tipos y compilación antes de aprobar el merge.
 
 ### Formato de Commits:
 ```
@@ -207,6 +211,22 @@ feat(domain): add R5 waitlist FIFO promotion logic with skip-on-conflict
 test(concurrency): verify A1 simultaneous enrollment transaction
 fix(auth): return 403 when participant accesses organizer routes
 refactor(schedule): decouple time slot overlap calculation from DB layer
+```
+
+---
+
+## Funcionalidad verificable: imágenes únicas de eventos
+
+El catálogo genera imágenes SVG locales a partir del tipo, título, descripción e identificador de cada sesión. Una sesión no depende de enlaces externos y dos sesiones distintas pueden mostrar ilustraciones visualmente diferenciadas.
+
+1. Inicia la aplicación y abre `http://localhost:3000`.
+2. Comprueba que las tarjetas de distintas sesiones tengan banners visibles.
+3. Compara eventos de temas distintos, por ejemplo Web3, inteligencia artificial, Kubernetes e investigación doctoral.
+4. Abre una sesión y verifica que el banner del detalle corresponda al mismo evento.
+5. Ejecuta las pruebas específicas:
+
+```bash
+npx vitest run src/lib/__tests__/eventImages.test.ts
 ```
 
 ---
