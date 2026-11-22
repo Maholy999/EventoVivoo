@@ -5,8 +5,8 @@ export async function HeaderNav() {
   const user = await getCurrentUser();
 
   return (
-    <nav style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-      {/* Nombres finales sección 3: "Explorar eventos" y "Programa del día" */}
+    <nav style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+      {/* Enlace al Catálogo Principal */}
       <Link
         href="/"
         style={{
@@ -14,49 +14,58 @@ export async function HeaderNav() {
           fontWeight: 600,
           color: 'var(--tinta)',
           padding: '4px 8px',
+          textDecoration: 'none',
         }}
       >
         Explorar eventos
       </Link>
 
-      <Link
-        href="/#programa"
-        style={{
-          fontSize: '13px',
-          fontWeight: 600,
-          color: 'var(--tinta)',
-          padding: '4px 8px',
-        }}
-      >
-        Programa del día
-      </Link>
-
-      {/* Si es Organizador: interfaz propia (R13) */}
+      {/* Si es Organizador: accesos rápidos a su gestión */}
       {user?.role === 'organizer' && (
-        <Link
-          href="/organizer"
-          style={{
-            fontSize: '13px',
-            fontWeight: 700,
-            color: '#FFFFFF',
-            backgroundColor: 'var(--tinta)',
-            padding: '6px 12px',
-            borderRadius: '2px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-        >
-          <span
+        <>
+          <Link
+            href="/organizer"
             style={{
-              width: '6px',
-              height: '6px',
-              backgroundColor: 'var(--senal)',
-              borderRadius: '50%',
+              fontSize: '13px',
+              fontWeight: 700,
+              color: '#FFFFFF',
+              backgroundColor: 'var(--tinta)',
+              padding: '6px 14px',
+              borderRadius: '2px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              textDecoration: 'none',
             }}
-          />
-          Operación en vivo
-        </Link>
+          >
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                backgroundColor: 'var(--senal)',
+                borderRadius: '50%',
+              }}
+            />
+            Panel de Organizador
+          </Link>
+          <Link
+            href="/organizer?tab=mis_sesiones&create=true"
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: '#FFFFFF',
+              backgroundColor: 'var(--senal)',
+              padding: '6px 12px',
+              borderRadius: '2px',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            + Crear sesión
+          </Link>
+        </>
       )}
 
       {/* Si es Participante */}
@@ -69,6 +78,7 @@ export async function HeaderNav() {
               fontWeight: 600,
               color: 'var(--tinta)',
               padding: '4px 8px',
+              textDecoration: 'none',
             }}
           >
             Mis inscripciones
@@ -80,6 +90,7 @@ export async function HeaderNav() {
               fontWeight: 600,
               color: 'var(--tinta)',
               padding: '4px 8px',
+              textDecoration: 'none',
             }}
           >
             Avisos
@@ -88,7 +99,7 @@ export async function HeaderNav() {
       )}
 
       {user ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto' }}>
           <span
             style={{
               fontSize: '11px',
@@ -102,20 +113,21 @@ export async function HeaderNav() {
           >
             {user.name} ({user.role === 'organizer' ? 'Organizador' : 'Participante'})
           </span>
-          <form action="/api/auth/logout" method="POST">
+          <form action="/api/auth/logout" method="POST" style={{ margin: 0 }}>
             <button
               type="submit"
               style={{
                 background: 'none',
-                border: 'none',
+                border: '1px solid var(--linea)',
                 color: 'var(--tinta-suave)',
                 fontSize: '12px',
+                fontWeight: 600,
                 cursor: 'pointer',
-                textDecoration: 'underline',
-                padding: '4px',
+                padding: '4px 8px',
+                borderRadius: '2px',
               }}
             >
-              Salir
+              Cerrar sesión
             </button>
           </form>
         </div>
@@ -123,7 +135,7 @@ export async function HeaderNav() {
         <Link
           href="/login"
           className="btn-senal"
-          style={{ fontSize: '13px', padding: '6px 14px' }}
+          style={{ fontSize: '13px', padding: '6px 14px', textDecoration: 'none', marginLeft: 'auto' }}
         >
           Iniciar sesión
         </Link>

@@ -93,6 +93,9 @@ export default function OrganizerPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
+  // Toggle para ver solo mis sesiones en la tabla en vivo o todas
+  const [showOnlyMineInLive, setShowOnlyMineInLive] = useState(true);
+
   // Filtro de Mis Sesiones
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'cancelled'>('all');
 
@@ -107,6 +110,15 @@ export default function OrganizerPage() {
   const [reschedulingSession, setReschedulingSession] = useState<SessionData | null>(null);
   const [reducingSession, setReducingSession] = useState<SessionData | null>(null);
 
+  // Modal genérico propio de confirmación (sin confirm tipo localhost)
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmText: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+
   // Form states
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -116,7 +128,7 @@ export default function OrganizerPage() {
     starts_at: '',
     ends_at: '',
     capacity: 25,
-    status: 'draft',
+    status: 'published',
     requires_approval: false,
   });
 
@@ -170,8 +182,36 @@ export default function OrganizerPage() {
     }
   };
 
+  const openCreateModal = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const sStr = new Date(tomorrow.setHours(10, 0, 0, 0)).toISOString().slice(0, 16);
+    const eStr = new Date(tomorrow.setHours(12, 0, 0, 0)).toISOString().slice(0, 16);
+    setCreateForm({
+      title: '',
+      type: 'taller',
+      description: '',
+      location: '',
+      starts_at: sStr,
+      ends_at: eStr,
+      capacity: 25,
+      status: 'published',
+      requires_approval: false,
+    });
+    setShowCreateModal(true);
+  };
+
   useEffect(() => {
     loadDashboard();
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('create') === 'true' || params.get('action') === 'new') {
+        openCreateModal();
+      }
+      if (params.get('tab') === 'mis_sesiones') {
+        setActiveTab('mis_sesiones');
+      }
+    }
   }, []);
 
   const openSessionDetail = async (id: string) => {
@@ -208,7 +248,7 @@ export default function OrganizerPage() {
         return;
       }
       setShowCreateModal(false);
-      setActionMessage({ type: 'ok', text: `Sesión "${data.session.title}" creada exitosamente.` });
+      setActionMessage({ type: 'ok', text: `Sesión "${data.session.title}" creada y añadida exitosamente a tu agenda.` });
       await loadDashboard();
     } catch {
       setActionMessage({ type: 'err', text: 'Error de conexión al crear sesión.' });
@@ -227,7 +267,7 @@ export default function OrganizerPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setActionMessage({ type: 'err', text: data.error || 'Error al editar' });
+        setActionMessage({ type: 'err', text: data.error || 'Error al editar la sesión' });
         return;
       }
       setEditingSession(null);
@@ -239,21 +279,27 @@ export default function OrganizerPage() {
     }
   };
 
-  const handlePublish = async (id: string) => {
-    if (!confirm('¿Deseas publicar esta sesión en el catálogo general?')) return;
-    try {
-      const res = await fetch(`/api/organizer/sessions/${id}/publish`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        setActionMessage({ type: 'err', text: data.error || 'Error al publicar' });
-        return;
-      }
-      setActionMessage({ type: 'ok', text: 'Sesión publicada exitosamente.' });
-      await loadDashboard();
-      if (selectedSessionId === id) openSessionDetail(id);
-    } catch {
-      setActionMessage({ type: 'err', text: 'Error de red.' });
-    }
+  const handlePublish = (id: string) => {
+    setConfirmModal({
+      title: 'Publicar sesión',
+      message: '¿Deseas publicar esta sesión en el catálogo general? Quedará visible inmediatamente para que los participantes se inscriban.',
+      confirmText: 'Sí, publicar ahora',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/organizer/sessions/${id}/publish`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) {
+            setActionMessage({ type: 'err', text: data.error || 'Error al publicar' });
+            return;
+          }
+          setActionMessage({ type: 'ok', text: 'Sesión publicada exitosamente en el catálogo.' });
+          await loadDashboard();
+          if (selectedSessionId === id) openSessionDetail(id);
+        } catch {
+          setActionMessage({ type: 'err', text: 'Error de red al publicar.' });
+        }
+      },
+    });
   };
 
   const handleRescheduleSubmit = async (e: React.FormEvent) => {
@@ -273,7 +319,7 @@ export default function OrganizerPage() {
       setReschedulingSession(null);
       setActionMessage({
         type: 'ok',
-        text: `Sesión reprogramada exitosamente. Se notificó a los inscritos.${
+        text: `Sesión reprogramada exitosamente. Se envió un aviso a los inscritos.${
           data.affectedUserIds?.length ? ` (${data.affectedUserIds.length} con choque de horario).` : ''
         }`,
       });
@@ -301,32 +347,37 @@ export default function OrganizerPage() {
       setReducingSession(null);
       setActionMessage({
         type: 'ok',
-        text: `Aforo reducido a ${reduceForm.newCapacity}. Se reordenó la lista y se avisó a los participantes degradados.`,
+        text: `Aforo reducido a ${reduceForm.newCapacity}. Se reordenó la lista y se avisó a los participantes transferidos a lista de espera.`,
       });
       await loadDashboard();
       if (selectedSessionId === reducingSession.id) openSessionDetail(reducingSession.id);
     } catch {
-      setActionMessage({ type: 'err', text: 'Error de conexión.' });
+      setActionMessage({ type: 'err', text: 'Error de conexión al reducir aforo.' });
     }
   };
 
-  const handleCancelSession = async (id: string, title: string) => {
-    if (!confirm(`¿Estás seguro de cancelar definitivamente la sesión "${title}"? Se avisará a todos los inscritos.`)) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/organizer/sessions/${id}/cancel`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        setActionMessage({ type: 'err', text: data.error || 'Error al cancelar' });
-        return;
-      }
-      setActionMessage({ type: 'ok', text: `La sesión "${title}" ha sido cancelada y se enviaron los avisos.` });
-      await loadDashboard();
-      if (selectedSessionId === id) openSessionDetail(id);
-    } catch {
-      setActionMessage({ type: 'err', text: 'Error de red.' });
-    }
+  const handleCancelSession = (id: string, title: string) => {
+    setConfirmModal({
+      title: 'Cancelar definitivamente la sesión',
+      message: `¿Estás seguro de cancelar "${title}"? Se notificará a todos los inscritos y se liberarán sus horarios.`,
+      confirmText: 'Sí, cancelar sesión',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/organizer/sessions/${id}/cancel`, { method: 'POST' });
+          const data = await res.json();
+          if (!res.ok) {
+            setActionMessage({ type: 'err', text: data.error || 'Error al cancelar la sesión' });
+            return;
+          }
+          setActionMessage({ type: 'ok', text: `La sesión "${title}" ha sido cancelada y los inscritos fueron notificados.` });
+          await loadDashboard();
+          if (selectedSessionId === id) openSessionDetail(id);
+        } catch {
+          setActionMessage({ type: 'err', text: 'Error de red al cancelar sesión.' });
+        }
+      },
+    });
   };
 
   const handleApproveEnrollment = async (sessionId: string, enrollmentId: string) => {
@@ -336,7 +387,7 @@ export default function OrganizerPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setActionMessage({ type: 'err', text: data.error || 'Error al aprobar' });
+        setActionMessage({ type: 'err', text: data.error || 'Error al aprobar solicitud' });
       } else {
         setActionMessage({ type: 'ok', text: data.message });
         await openSessionDetail(sessionId);
@@ -348,14 +399,13 @@ export default function OrganizerPage() {
   };
 
   const handleRejectEnrollment = async (sessionId: string, enrollmentId: string) => {
-    if (!confirm('¿Rechazar esta solicitud de inscripción?')) return;
     try {
       const res = await fetch(`/api/organizer/sessions/${sessionId}/enrollments/${enrollmentId}/reject`, {
         method: 'POST',
       });
       const data = await res.json();
       if (!res.ok) {
-        setActionMessage({ type: 'err', text: data.error || 'Error al rechazar' });
+        setActionMessage({ type: 'err', text: data.error || 'Error al rechazar solicitud' });
       } else {
         setActionMessage({ type: 'ok', text: data.message });
         await openSessionDetail(sessionId);
@@ -422,6 +472,8 @@ export default function OrganizerPage() {
     return s.status === statusFilter;
   });
 
+  const liveTableSessions = showOnlyMineInLive ? mySessions : sessions;
+
   if (loading) {
     return (
       <main className="container" style={{ padding: '40px 16px' }}>
@@ -457,7 +509,7 @@ export default function OrganizerPage() {
 
   return (
     <main className="container" style={{ padding: '24px 16px 80px' }}>
-      {/* Encabezado del Panel de Organizador */}
+      {/* Encabezado Principal del Organizador */}
       <div
         style={{
           borderBottom: '2px solid #16130F',
@@ -465,9 +517,9 @@ export default function OrganizerPage() {
           marginBottom: '24px',
           display: 'flex',
           flexWrap: 'wrap',
-          alignItems: 'baseline',
+          alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '12px',
+          gap: '14px',
         }}
       >
         <div>
@@ -480,76 +532,98 @@ export default function OrganizerPage() {
               color: '#5E584F',
             }}
           >
-            Panel de Control del Organizador
+            Panel de Gestión del Organizador
           </span>
-          <h1 style={{ fontSize: '26px', fontWeight: 700, margin: '4px 0 0' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 800, margin: '2px 0 0' }}>
             Operación en vivo
           </h1>
         </div>
 
-        {/* Pestañas de navegación interna */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {/* Botón Principal "+ Crear sesión" SIEMPRE VISIBLE */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button
-            onClick={() => { setActiveTab('operacion'); setSelectedSessionId(null); }}
+            onClick={openCreateModal}
             style={{
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: 600,
+              backgroundColor: 'var(--senal)',
+              color: '#FFFFFF',
+              border: 'none',
+              padding: '10px 18px',
+              fontSize: '13px',
+              fontWeight: 700,
               cursor: 'pointer',
-              border: '1px solid #16130F',
-              background: activeTab === 'operacion' ? '#16130F' : '#FFFFFF',
-              color: activeTab === 'operacion' ? '#FFFFFF' : '#16130F',
               borderRadius: '2px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
           >
-            Operación en vivo
-          </button>
-          <button
-            onClick={() => { setActiveTab('mis_sesiones'); setSelectedSessionId(null); }}
-            style={{
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              border: '1px solid #16130F',
-              background: activeTab === 'mis_sesiones' ? '#16130F' : '#FFFFFF',
-              color: activeTab === 'mis_sesiones' ? '#FFFFFF' : '#16130F',
-              borderRadius: '2px',
-            }}
-          >
-            Mis sesiones ({mySessions.length})
-          </button>
-          <button
-            onClick={() => { setActiveTab('asistencia'); setSelectedSessionId(null); }}
-            style={{
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              border: '1px solid #16130F',
-              background: activeTab === 'asistencia' ? '#16130F' : '#FFFFFF',
-              color: activeTab === 'asistencia' ? '#FFFFFF' : '#16130F',
-              borderRadius: '2px',
-            }}
-          >
-            Asistencia / Acreditación
-          </button>
-          <button
-            onClick={() => { setActiveTab('catalogo'); setSelectedSessionId(null); }}
-            style={{
-              padding: '6px 14px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              border: '1px solid #16130F',
-              background: activeTab === 'catalogo' ? '#16130F' : '#FFFFFF',
-              color: activeTab === 'catalogo' ? '#FFFFFF' : '#16130F',
-              borderRadius: '2px',
-            }}
-          >
-            Catálogo global (Lectura)
+            + Crear nueva sesión
           </button>
         </div>
+      </div>
+
+      {/* Pestañas de navegación interna */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '20px' }}>
+        <button
+          onClick={() => { setActiveTab('operacion'); setSelectedSessionId(null); }}
+          style={{
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: '1px solid #16130F',
+            background: activeTab === 'operacion' ? '#16130F' : '#FFFFFF',
+            color: activeTab === 'operacion' ? '#FFFFFF' : '#16130F',
+            borderRadius: '2px',
+          }}
+        >
+          Operación en vivo ({mySessions.length})
+        </button>
+        <button
+          onClick={() => { setActiveTab('mis_sesiones'); setSelectedSessionId(null); }}
+          style={{
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: '1px solid #16130F',
+            background: activeTab === 'mis_sesiones' ? '#16130F' : '#FFFFFF',
+            color: activeTab === 'mis_sesiones' ? '#FFFFFF' : '#16130F',
+            borderRadius: '2px',
+          }}
+        >
+          Mis sesiones y Edición ({mySessions.length})
+        </button>
+        <button
+          onClick={() => { setActiveTab('asistencia'); setSelectedSessionId(null); }}
+          style={{
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: '1px solid #16130F',
+            background: activeTab === 'asistencia' ? '#16130F' : '#FFFFFF',
+            color: activeTab === 'asistencia' ? '#FFFFFF' : '#16130F',
+            borderRadius: '2px',
+          }}
+        >
+          Escanear QR / Asistencia
+        </button>
+        <button
+          onClick={() => { setActiveTab('catalogo'); setSelectedSessionId(null); }}
+          style={{
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            border: '1px solid #16130F',
+            background: activeTab === 'catalogo' ? '#16130F' : '#FFFFFF',
+            color: activeTab === 'catalogo' ? '#FFFFFF' : '#16130F',
+            borderRadius: '2px',
+          }}
+        >
+          Otras sesiones del evento ({sessions.length})
+        </button>
       </div>
 
       {/* Avisos o mensajes de acción */}
@@ -570,14 +644,14 @@ export default function OrganizerPage() {
           <span>{actionMessage.text}</span>
           <button
             onClick={() => setActionMessage(null)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '14px' }}
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* VISTA 1: OPERACIÓN EN VIVO (Diseñada para leerse en 5 segundos) */}
+      {/* VISTA 1: OPERACIÓN EN VIVO */}
       {activeTab === 'operacion' && !selectedSessionId && (
         <section>
           {/* Franja "Requieren atención" */}
@@ -622,12 +696,12 @@ export default function OrganizerPage() {
                     key={`att-${s.id}`}
                     style={{
                       border: '1px solid #E8440F',
-                      padding: '10px 12px',
+                      padding: '12px',
                       background: '#FFFFFF',
                       fontSize: '12px',
                     }}
                   >
-                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{s.title}</div>
+                    <div style={{ fontWeight: 700, marginBottom: '4px' }}>{s.title}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
                       {s.attention_reasons.map((r, i) => (
                         <span
@@ -648,15 +722,16 @@ export default function OrganizerPage() {
                     <button
                       onClick={() => openSessionDetail(s.id)}
                       style={{
-                        padding: '4px 8px',
+                        padding: '5px 10px',
                         background: '#16130F',
                         color: '#FFFFFF',
                         border: 'none',
                         fontSize: '11px',
                         cursor: 'pointer',
+                        fontWeight: 600,
                       }}
                     >
-                      Ver detalle / gestionar →
+                      Ver inscritos / gestionar →
                     </button>
                   </div>
                 ))}
@@ -675,10 +750,10 @@ export default function OrganizerPage() {
           >
             <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
               <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
-                Total Sesiones
+                Mis Sesiones
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
-                {sessions.length}
+                {mySessions.length}
               </div>
             </div>
             <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
@@ -686,7 +761,7 @@ export default function OrganizerPage() {
                 Inscritos Confirmados
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
-                {sessions.reduce((acc, s) => acc + s.confirmed_count, 0)}
+                {mySessions.reduce((acc, s) => acc + s.confirmed_count, 0)}
               </div>
             </div>
             <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
@@ -694,20 +769,20 @@ export default function OrganizerPage() {
                 En Lista de Espera
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
-                {sessions.reduce((acc, s) => acc + s.waitlist_count, 0)}
+                {mySessions.reduce((acc, s) => acc + s.waitlist_count, 0)}
               </div>
             </div>
             <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
               <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
-                Asistencia Verificada
+                Asistencia en Puerta
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
-                {sessions.reduce((acc, s) => acc + s.attended_count, 0)}
+                {mySessions.reduce((acc, s) => acc + s.attended_count, 0)}
               </div>
             </div>
             <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
               <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
-                Satisfacción Global
+                Opiniones de Asistentes
               </div>
               <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
                 ⭐ {surveys.average_rating > 0 ? surveys.average_rating.toFixed(1) : '—'}
@@ -716,7 +791,7 @@ export default function OrganizerPage() {
             </div>
           </div>
 
-          {/* Tabla compacta de sesiones en vivo */}
+          {/* Tabla de monitoreo en vivo con acciones directas */}
           <div style={{ border: '1px solid #16130F', background: '#FFFFFF' }}>
             <div
               style={{
@@ -724,27 +799,56 @@ export default function OrganizerPage() {
                 borderBottom: '1px solid #DDD7CC',
                 background: '#F6F3EE',
                 display: 'flex',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                gap: '10px',
               }}
             >
-              <span style={{ fontWeight: 700, fontSize: '14px' }}>
-                Monitoreo de Sesiones en Vivo
-              </span>
-              <a
-                href="/api/organizer/export-csv"
-                style={{
-                  padding: '6px 12px',
-                  background: '#FFFFFF',
-                  color: '#16130F',
-                  border: '1px solid #16130F',
-                  fontSize: '12px',
-                  textDecoration: 'none',
-                  fontWeight: 600,
-                }}
-              >
-                Exportar CSV general
-              </a>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontWeight: 700, fontSize: '14px' }}>
+                  Monitoreo de Sesiones en Vivo
+                </span>
+                <label style={{ fontSize: '12px', color: '#5E584F', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <input
+                    type="checkbox"
+                    checked={showOnlyMineInLive}
+                    onChange={(e) => setShowOnlyMineInLive(e.target.checked)}
+                  />
+                  Mostrar solo mis sesiones ({mySessions.length})
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={openCreateModal}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#E8440F',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  + Nueva sesión
+                </button>
+                <a
+                  href="/api/organizer/export-csv"
+                  style={{
+                    padding: '6px 12px',
+                    background: '#FFFFFF',
+                    color: '#16130F',
+                    border: '1px solid #16130F',
+                    fontSize: '12px',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                  }}
+                >
+                  Exportar CSV
+                </a>
+              </div>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
@@ -755,14 +859,13 @@ export default function OrganizerPage() {
                     <th style={{ padding: '10px 12px' }}>SESIÓN</th>
                     <th style={{ padding: '10px 12px', minWidth: '160px' }}>OCUPACIÓN (BARRA SEGMENTADA)</th>
                     <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>CONF / ASIST</th>
-                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>NO-SHOWS</th>
                     <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>ESPERA</th>
-                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>ENCUESTAS</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>ACCIÓN</th>
+                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>OPINIONES</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>GESTIÓN DIRECTA</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.map((s, idx) => (
+                  {liveTableSessions.map((s, idx) => (
                     <tr
                       key={s.id}
                       style={{
@@ -786,9 +889,6 @@ export default function OrganizerPage() {
                       <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
                         <strong>{s.confirmed_count}</strong> / <span style={{ color: '#1E6B4F' }}>{s.attended_count}</span>
                       </td>
-                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px', color: s.no_shows > 0 ? '#B7700B' : '#5E584F' }}>
-                        {s.no_shows}
-                      </td>
                       <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
                         {s.waitlist_count > 0 ? (
                           <span style={{ fontWeight: 700, color: '#E8440F' }}>{s.waitlist_count}</span>
@@ -804,19 +904,64 @@ export default function OrganizerPage() {
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button
-                          onClick={() => openSessionDetail(s.id)}
-                          style={{
-                            padding: '4px 10px',
-                            background: '#16130F',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            fontSize: '11px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Ver detalle
-                        </button>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => openSessionDetail(s.id)}
+                            style={{
+                              padding: '4px 8px',
+                              background: '#16130F',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Inscritos ({s.confirmed_count})
+                          </button>
+
+                          {s.is_owner && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setEditingSession(s);
+                                  setEditForm({
+                                    title: s.title,
+                                    type: s.type,
+                                    description: s.description || '',
+                                    location: s.location || '',
+                                  });
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#FFFFFF',
+                                  color: '#16130F',
+                                  border: '1px solid #16130F',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setReducingSession(s);
+                                  setReduceForm({ newCapacity: Math.max(1, s.capacity - 5) });
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#FFFFFF',
+                                  color: '#16130F',
+                                  border: '1px solid #16130F',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Aforo
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -864,24 +1009,7 @@ export default function OrganizerPage() {
             </div>
 
             <button
-              onClick={() => {
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                const sStr = new Date(tomorrow.setHours(10, 0, 0, 0)).toISOString().slice(0, 16);
-                const eStr = new Date(tomorrow.setHours(12, 0, 0, 0)).toISOString().slice(0, 16);
-                setCreateForm({
-                  title: '',
-                  type: 'taller',
-                  description: '',
-                  location: '',
-                  starts_at: sStr,
-                  ends_at: eStr,
-                  capacity: 25,
-                  status: 'draft',
-                  requires_approval: false,
-                });
-                setShowCreateModal(true);
-              }}
+              onClick={openCreateModal}
               style={{
                 padding: '8px 16px',
                 background: '#E8440F',
@@ -898,7 +1026,13 @@ export default function OrganizerPage() {
 
           {filteredMySessions.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', border: '1px solid #DDD7CC', background: '#F6F3EE' }}>
-              <p style={{ color: '#5E584F' }}>No hay sesiones en esta categoría.</p>
+              <p style={{ color: '#5E584F', margin: '0 0 12px' }}>No hay sesiones en esta categoría.</p>
+              <button
+                onClick={openCreateModal}
+                style={{ padding: '8px 16px', background: '#16130F', color: '#FFF', border: 'none', cursor: 'pointer' }}
+              >
+                Crear una sesión ahora
+              </button>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -959,7 +1093,7 @@ export default function OrganizerPage() {
                     <button
                       onClick={() => openSessionDetail(s.id)}
                       style={{
-                        padding: '5px 12px',
+                        padding: '6px 14px',
                         background: '#16130F',
                         color: '#FFFFFF',
                         border: 'none',
@@ -975,7 +1109,7 @@ export default function OrganizerPage() {
                       <button
                         onClick={() => handlePublish(s.id)}
                         style={{
-                          padding: '5px 12px',
+                          padding: '6px 14px',
                           background: '#1E6B4F',
                           color: '#FFFFFF',
                           border: 'none',
@@ -984,7 +1118,7 @@ export default function OrganizerPage() {
                           cursor: 'pointer',
                         }}
                       >
-                        ✓ Publicar
+                        ✓ Publicar en catálogo
                       </button>
                     )}
 
@@ -999,7 +1133,7 @@ export default function OrganizerPage() {
                         });
                       }}
                       style={{
-                        padding: '5px 12px',
+                        padding: '6px 12px',
                         background: '#FFFFFF',
                         color: '#16130F',
                         border: '1px solid #16130F',
@@ -1020,7 +1154,7 @@ export default function OrganizerPage() {
                         });
                       }}
                       style={{
-                        padding: '5px 12px',
+                        padding: '6px 12px',
                         background: '#FFFFFF',
                         color: '#16130F',
                         border: '1px solid #16130F',
@@ -1028,7 +1162,7 @@ export default function OrganizerPage() {
                         cursor: 'pointer',
                       }}
                     >
-                      Reprogramar (R8)
+                      Reprogramar fecha/hora
                     </button>
 
                     <button
@@ -1037,7 +1171,7 @@ export default function OrganizerPage() {
                         setReduceForm({ newCapacity: Math.max(1, s.capacity - 5) });
                       }}
                       style={{
-                        padding: '5px 12px',
+                        padding: '6px 12px',
                         background: '#FFFFFF',
                         color: '#16130F',
                         border: '1px solid #16130F',
@@ -1045,14 +1179,14 @@ export default function OrganizerPage() {
                         cursor: 'pointer',
                       }}
                     >
-                      Reducir aforo (R7)
+                      Modificar aforo
                     </button>
 
                     {s.status !== 'cancelled' && (
                       <button
                         onClick={() => handleCancelSession(s.id, s.title)}
                         style={{
-                          padding: '5px 12px',
+                          padding: '6px 12px',
                           background: '#FFF5F2',
                           color: '#E8440F',
                           border: '1px solid #E8440F',
@@ -1061,7 +1195,7 @@ export default function OrganizerPage() {
                           marginLeft: 'auto',
                         }}
                       >
-                        Cancelar sesión (R12)
+                        Cancelar sesión
                       </button>
                     )}
                   </div>
@@ -1080,7 +1214,7 @@ export default function OrganizerPage() {
               Acreditación y Control de Acceso
             </h2>
             <p style={{ fontSize: '13px', color: '#5E584F', marginBottom: '20px' }}>
-              Escanea el código QR de la credencial o ingresa el código manual de 128 bits para registrar la asistencia. La validación es idempotente.
+              Escanea el código QR de la credencial o ingresa el token para registrar la asistencia. La validación es instantánea e idempotente.
             </p>
 
             <form onSubmit={handleCheckInSubmit} style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
@@ -1143,12 +1277,12 @@ export default function OrganizerPage() {
         </section>
       )}
 
-      {/* VISTA 4: CATÁLOGO GLOBAL EN SOLO LECTURA (R14) */}
+      {/* VISTA 4: OTRAS SESIONES DEL EVENTO */}
       {activeTab === 'catalogo' && !selectedSessionId && (
         <section>
           <div style={{ padding: '12px 16px', background: '#F6F3EE', border: '1px solid #DDD7CC', marginBottom: '16px' }}>
             <span style={{ fontSize: '13px', color: '#5E584F' }}>
-              ℹ️ Estás viendo el catálogo completo del evento en <strong>Modo Lectura</strong> (R14). Solo puedes gestionar y editar las sesiones donde eres el organizador creador.
+              ℹ️ Catálogo global del evento. Aquí puedes consultar el programa completo y sesiones de otros organizadores en modo consulta.
             </span>
           </div>
 
@@ -1200,7 +1334,7 @@ export default function OrganizerPage() {
         </section>
       )}
 
-      {/* DETALLE COMPLETO DE UNA SESIÓN (Inscritos, Espera, Auditoría y Encuestas) */}
+      {/* DETALLE COMPLETO DE UNA SESIÓN */}
       {selectedSessionId && (
         <section style={{ border: '2px solid #16130F', background: '#FFFFFF', padding: '20px', marginTop: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #16130F', paddingBottom: '12px', marginBottom: '16px' }}>
@@ -1235,7 +1369,7 @@ export default function OrganizerPage() {
               <a
                 href={`/api/organizer/export-csv?sessionId=${sessionDetail.session.id}`}
                 style={{
-                  padding: '6px 14px',
+                  padding: '8px 14px',
                   background: '#16130F',
                   color: '#FFFFFF',
                   textDecoration: 'none',
@@ -1252,11 +1386,11 @@ export default function OrganizerPage() {
 
           {sessionDetail && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-              {/* Solicitudes Pendientes de Aprobación (F13) */}
+              {/* Solicitudes Pendientes de Aprobación */}
               {sessionDetail.pending && sessionDetail.pending.length > 0 && (
                 <div style={{ gridColumn: '1 / -1', border: '2px solid #E8440F', padding: '16px', background: '#FFF8F6' }}>
                   <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#E8440F', marginBottom: '8px' }}>
-                    Solicitudes Pendientes de Aprobación (F13) — {sessionDetail.pending.length} por revisar
+                    Solicitudes Pendientes de Aprobación — {sessionDetail.pending.length} por revisar
                   </h3>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
@@ -1340,7 +1474,7 @@ export default function OrganizerPage() {
               {/* Columna 2: Lista de espera en orden FIFO */}
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #E8440F', paddingBottom: '6px', marginBottom: '12px' }}>
-                  Lista de Espera en Orden FIFO ({sessionDetail.waitlist.length})
+                  Lista de Espera en Orden de Llegada ({sessionDetail.waitlist.length})
                 </h3>
                 {sessionDetail.waitlist.length === 0 ? (
                   <p style={{ fontSize: '13px', color: '#5E584F' }}>No hay participantes en espera.</p>
@@ -1374,10 +1508,10 @@ export default function OrganizerPage() {
                 )}
               </div>
 
-              {/* Columna 3: Registro de Cambios (Auditoría R11) */}
+              {/* Columna 3: Registro de Cambios (Auditoría) */}
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #16130F', paddingBottom: '6px', marginBottom: '12px' }}>
-                  Registro de Cambios y Auditoría (R11)
+                  Registro de Cambios y Auditoría ({sessionDetail.auditLogs.length})
                 </h3>
                 {sessionDetail.auditLogs.length === 0 ? (
                   <p style={{ fontSize: '13px', color: '#5E584F' }}>Sin modificaciones registradas.</p>
@@ -1402,13 +1536,13 @@ export default function OrganizerPage() {
                 )}
               </div>
 
-              {/* Columna 4: Encuestas y opiniones recibidas */}
+              {/* Columna 4: Opiniones de asistentes recibidas */}
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #B7700B', paddingBottom: '6px', marginBottom: '12px' }}>
-                  Encuestas de Satisfacción Recibidas ({sessionDetail.surveys.length})
+                  Opiniones de Asistentes Recibidas ({sessionDetail.surveys.length})
                 </h3>
                 {sessionDetail.surveys.length === 0 ? (
-                  <p style={{ fontSize: '13px', color: '#5E584F' }}>Aún no se han completado encuestas para esta sesión.</p>
+                  <p style={{ fontSize: '13px', color: '#5E584F' }}>Aún no se han recibido opiniones para esta sesión.</p>
                 ) : (
                   <div style={{ maxHeight: '340px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {sessionDetail.surveys.map((sv) => (
@@ -1428,30 +1562,30 @@ export default function OrganizerPage() {
         </section>
       )}
 
-      {/* MODAL CREAR SESIÓN (R17) */}
+      {/* MODAL CREAR SESIÓN */}
       {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
           <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '520px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px' }}>Crear nueva sesión</h3>
             <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Título *</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Título del evento *</label>
                 <input
                   type="text"
                   required
                   value={createForm.title}
                   onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-                  placeholder="Ej. Taller de Arquitectura Limpia"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  placeholder="Ej. Taller de Inteligencia Artificial y LLMs"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Tipo *</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Tipo de evento *</label>
                   <select
                     value={createForm.type}
                     onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                   >
                     <option value="taller">Taller</option>
                     <option value="hackatón">Hackatón</option>
@@ -1460,68 +1594,69 @@ export default function OrganizerPage() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Cupo (≥1) *</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Cupo de participantes (≥1) *</label>
                   <input
                     type="number"
                     min="1"
                     required
                     value={createForm.capacity}
                     onChange={(e) => setCreateForm({ ...createForm, capacity: Number(e.target.value) })}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Ubicación</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Ubicación / Sala *</label>
                 <input
                   type="text"
+                  required
                   value={createForm.location}
                   onChange={(e) => setCreateForm({ ...createForm, location: e.target.value })}
-                  placeholder="Ej. Auditorio Alfa, Sala 2"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  placeholder="Ej. Auditorio Central, Aula 102"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Inicio *</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Fecha y hora de inicio *</label>
                   <input
                     type="datetime-local"
                     required
                     value={createForm.starts_at}
                     onChange={(e) => setCreateForm({ ...createForm, starts_at: e.target.value })}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Fin *</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Fecha y hora de término *</label>
                   <input
                     type="datetime-local"
                     required
                     value={createForm.ends_at}
                     onChange={(e) => setCreateForm({ ...createForm, ends_at: e.target.value })}
-                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                   />
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Descripción</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Descripción detallada</label>
                 <textarea
                   rows={3}
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  placeholder="Descripción detallada de los objetivos y actividades de la sesión..."
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  placeholder="Describe los objetivos, requisitos y contenido de la sesión..."
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Estado inicial</label>
                 <select
                   value={createForm.status}
-                  onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  onChange={(e) => setCreateForm({ ...createForm, status: e.target.value as 'draft' | 'published' })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 >
+                  <option value="published">Publicada (abierta inmediatamente al público)</option>
                   <option value="draft">Borrador (oculta al público)</option>
-                  <option value="published">Publicada (abierta a inscripciones)</option>
                 </select>
               </div>
 
@@ -1533,7 +1668,7 @@ export default function OrganizerPage() {
                   onChange={(e) => setCreateForm({ ...createForm, requires_approval: e.target.checked })}
                 />
                 <label htmlFor="requires_approval" style={{ fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
-                  Requiere aprobación previa del organizador (F13)
+                  Requiere aprobación previa del organizador (las solicitudes quedarán pendientes hasta que las apruebes)
                 </label>
               </div>
 
@@ -1547,9 +1682,9 @@ export default function OrganizerPage() {
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 16px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                  style={{ padding: '8px 16px', background: '#E8440F', color: '#FFFFFF', border: 'none', cursor: 'pointer', fontWeight: 700 }}
                 >
-                  Guardar sesión
+                  Crear y guardar sesión
                 </button>
               </div>
             </form>
@@ -1557,9 +1692,9 @@ export default function OrganizerPage() {
         </div>
       )}
 
-      {/* MODAL EDITAR SESIÓN (R14) */}
+      {/* MODAL EDITAR SESIÓN */}
       {editingSession && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
           <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '480px', width: '100%' }}>
             <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px' }}>Editar sesión</h3>
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1570,7 +1705,7 @@ export default function OrganizerPage() {
                   required
                   value={editForm.title}
                   onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div>
@@ -1578,7 +1713,7 @@ export default function OrganizerPage() {
                 <select
                   value={editForm.type}
                   onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 >
                   <option value="taller">Taller</option>
                   <option value="hackatón">Hackatón</option>
@@ -1592,7 +1727,7 @@ export default function OrganizerPage() {
                   type="text"
                   value={editForm.location}
                   onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div>
@@ -1601,7 +1736,7 @@ export default function OrganizerPage() {
                   rows={3}
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
@@ -1614,7 +1749,7 @@ export default function OrganizerPage() {
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer', fontWeight: 600 }}
                 >
                   Guardar cambios
                 </button>
@@ -1624,13 +1759,13 @@ export default function OrganizerPage() {
         </div>
       )}
 
-      {/* MODAL REPROGRAMAR SESIÓN (R8) */}
+      {/* MODAL REPROGRAMAR SESIÓN */}
       {reschedulingSession && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
           <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '440px', width: '100%' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 12px' }}>Reprogramar sesión</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 12px' }}>Reprogramar fecha y hora</h3>
             <p style={{ fontSize: '12px', color: '#5E584F', marginBottom: '14px' }}>
-              Al cambiar fecha o sala, el sistema revalidará choques de horario con las demás sesiones confirmadas de cada participante y les notificará dentro de la app (R8).
+              Al cambiar fecha o sala, el sistema validará choques de horario con las demás sesiones confirmadas de cada participante y les notificará dentro de la app.
             </p>
             <form onSubmit={handleRescheduleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
@@ -1640,7 +1775,7 @@ export default function OrganizerPage() {
                   required
                   value={rescheduleForm.starts_at}
                   onChange={(e) => setRescheduleForm({ ...rescheduleForm, starts_at: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div>
@@ -1650,7 +1785,7 @@ export default function OrganizerPage() {
                   required
                   value={rescheduleForm.ends_at}
                   onChange={(e) => setRescheduleForm({ ...rescheduleForm, ends_at: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div>
@@ -1659,7 +1794,7 @@ export default function OrganizerPage() {
                   type="text"
                   value={rescheduleForm.location}
                   onChange={(e) => setRescheduleForm({ ...rescheduleForm, location: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
@@ -1672,7 +1807,7 @@ export default function OrganizerPage() {
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer', fontWeight: 600 }}
                 >
                   Reprogramar y avisar
                 </button>
@@ -1682,15 +1817,15 @@ export default function OrganizerPage() {
         </div>
       )}
 
-      {/* MODAL REDUCIR AFORO (R7) */}
+      {/* MODAL REDUCIR AFORO */}
       {reducingSession && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
           <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '420px', width: '100%' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 12px' }}>Reducir aforo</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 12px' }}>Modificar / Reducir aforo</h3>
             <p style={{ fontSize: '12px', color: '#5E584F', marginBottom: '14px' }}>
               Capacidad actual: <strong>{reducingSession.capacity}</strong> plazas.<br />
               Inscritos confirmados: <strong>{reducingSession.confirmed_count}</strong>.<br />
-              Política LIFO (R7): los últimos inscritos confirmados pasarán a la cabeza de la lista de espera con notificación en su bandeja.
+              Si reduces por debajo de los inscritos, los últimos inscritos pasarán ordenadamente a la cabeza de la lista de espera con aviso inmediato.
             </p>
             <form onSubmit={handleReduceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
@@ -1701,7 +1836,7 @@ export default function OrganizerPage() {
                   required
                   value={reduceForm.newCapacity}
                   onChange={(e) => setReduceForm({ newCapacity: Number(e.target.value) })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F', boxSizing: 'border-box' }}
                 />
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
@@ -1714,12 +1849,82 @@ export default function OrganizerPage() {
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer', fontWeight: 600 }}
                 >
-                  Aplicar reducción LIFO
+                  Guardar nuevo aforo
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GENÉRICO DE CONFIRMACIÓN PROPIO (SIN ALERTS TIPO LOCALHOST) */}
+      {confirmModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(22, 19, 15, 0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '16px',
+          }}
+          onClick={() => setConfirmModal(null)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: `2px solid ${confirmModal.danger ? '#E8440F' : '#16130F'}`,
+              padding: '24px',
+              maxWidth: '460px',
+              width: '100%',
+              borderRadius: '2px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 10px', color: confirmModal.danger ? '#E8440F' : '#16130F' }}>
+              {confirmModal.title}
+            </h3>
+            <p style={{ fontSize: '13px', color: '#5E584F', lineHeight: 1.5, margin: '0 0 20px' }}>
+              {confirmModal.message}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                onClick={() => setConfirmModal(null)}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #DDD7CC',
+                  background: '#FFFFFF',
+                  color: '#16130F',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Volver
+              </button>
+              <button
+                onClick={() => {
+                  const cb = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  cb();
+                }}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: confirmModal.danger ? '#E8440F' : '#16130F',
+                  color: '#FFFFFF',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
           </div>
         </div>
       )}
