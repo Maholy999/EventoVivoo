@@ -387,7 +387,7 @@ export default function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
             {/* Confirmadas */}
             {myConfirmedSessions.map((s) => {
-              const img = getSessionImage(s.type, s.title);
+              const img = getSessionImage(s.type, s.title, s.id);
               return (
                 <div
                   key={`my-conf-${s.id}`}
@@ -711,7 +711,7 @@ export default function HomePage() {
                   const isUserConfirmed = s.user_status === 'confirmed';
                   const isUserWaitlisted = s.user_status === 'waitlisted';
                   const isUserPending = s.user_status === 'pending';
-                  const img = getSessionImage(s.type, s.title);
+                  const img = getSessionImage(s.type, s.title, s.id);
 
                   return (
                     <div
@@ -980,7 +980,7 @@ export default function HomePage() {
             {/* Banner de Imagen del Evento */}
             <div style={{ height: '180px', width: '100%', position: 'relative', overflow: 'hidden' }}>
               <img
-                src={getSessionImage(selectedSession.type, selectedSession.title).url}
+                src={getSessionImage(selectedSession.type, selectedSession.title, selectedSession.id).url}
                 alt={selectedSession.title}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
