@@ -26,7 +26,7 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgres://eventovivo:eventovivo_pass@localhost:5432/eventovivo
+      DATABASE_URL: postgres://eventovivo:eventovivo_pass@localhost:5433/eventovivo_test
       DATABASE_URL_TEST: postgres://eventovivo:eventovivo_pass@localhost:5433/eventovivo_test
       SESSION_SECRET: ci_secret_for_testing_only_32chars_x
 
@@ -41,14 +41,11 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      - name: Ejecutar pruebas unitarias e integración
+        run: npm test -- --no-file-parallelism
+
       - name: Verificar tipos
         run: npx tsc --noEmit
 
-      - name: Ejecutar pruebas
-        run: npm test
-
       - name: Construir proyecto
         run: npm run build
-
-      - name: Reporte de cobertura
-        run: npm run test:coverage

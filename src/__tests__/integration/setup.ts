@@ -24,16 +24,21 @@ export async function setupTestDb() {
     CREATE TABLE IF NOT EXISTS sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'taller',
       description TEXT,
       location TEXT,
       starts_at TIMESTAMPTZ NOT NULL,
       ends_at TIMESTAMPTZ NOT NULL,
       capacity INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'draft',
+      requires_approval BOOLEAN NOT NULL DEFAULT false,
       organizer_id UUID NOT NULL REFERENCES users(id),
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'taller';
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS enrollments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
