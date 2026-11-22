@@ -44,6 +44,16 @@ export async function GET(
       [sessionId]
     );
 
+    // F13: Obtener lista de pendientes de aprobación
+    const pendingRes = await pool.query(
+      `SELECT e.id as enrollment_id, e.user_id, u.name, u.email, e.enrolled_at
+       FROM enrollments e
+       JOIN users u ON u.id = e.user_id
+       WHERE e.session_id = $1 AND e.status = 'pending'
+       ORDER BY e.enrolled_at ASC`,
+      [sessionId]
+    );
+
     // Obtener registro de cambios (auditoría R11)
     const auditRes = await pool.query(
       `SELECT a.id, a.action, a.previous_value, a.new_value, a.created_at, u.name as changed_by_name
@@ -69,6 +79,7 @@ export async function GET(
       session,
       confirmed: confirmedRes.rows,
       waitlist: waitlistRes.rows,
+      pending: pendingRes.rows,
       auditLogs: auditRes.rows,
       surveys: surveysRes.rows,
     });

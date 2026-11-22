@@ -34,6 +34,7 @@ export const sessions = pgTable('sessions', {
   status: text('status', { enum: ['draft', 'published', 'cancelled'] })
     .notNull()
     .default('draft'),
+  requires_approval: boolean('requires_approval').notNull().default(false),
   organizer_id: uuid('organizer_id')
     .notNull()
     .references(() => users.id),

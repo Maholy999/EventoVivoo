@@ -3,7 +3,7 @@ import { pool } from './client';
 export async function ensureSchemaAndIndexes() {
   const client = await pool.connect();
   try {
-    // 1. Añadir columna type a sessions si no existe
+    // 1. Añadir columnas a sessions si no existen
     await client.query(`
       DO $$
       BEGIN
@@ -12,6 +12,13 @@ export async function ensureSchemaAndIndexes() {
           WHERE table_name = 'sessions' AND column_name = 'type'
         ) THEN
           ALTER TABLE sessions ADD COLUMN type text NOT NULL DEFAULT 'taller';
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'sessions' AND column_name = 'requires_approval'
+        ) THEN
+          ALTER TABLE sessions ADD COLUMN requires_approval boolean NOT NULL DEFAULT false;
         END IF;
       END $$;
     `);

@@ -34,6 +34,50 @@ export async function POST(
     const attendanceRepo = new AttendanceRepository(pool);
     const enrollmentService = new EnrollmentService(pool, sessionRepo, enrollmentRepo);
 
+    // F13: Verificar si la sesión requiere aprobación previa del organizador
+    const sCheck = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
+    if (sCheck.rows.length === 0) {
+      return NextResponse.json({ error: 'Sesión no encontrada' }, { status: 404 });
+    }
+    const sessionRow = sCheck.rows[0];
+
+    if (sessionRow.requires_approval) {
+      const existingEnr = await pool.query(
+        'SELECT * FROM enrollments WHERE session_id = $1 AND user_id = $2 AND status != $3',
+        [sessionId, user.id, 'cancelled']
+      );
+      if (existingEnr.rows.length > 0) {
+        return NextResponse.json(
+          { error: 'Ya tienes una solicitud o inscripción activa para esta sesión.' },
+          { status: 400 }
+        );
+      }
+
+      const pendingInsert = await pool.query(
+        `INSERT INTO enrollments (session_id, user_id, status)
+         VALUES ($1, $2, 'pending')
+         RETURNING *`,
+        [sessionId, user.id]
+      );
+      const pendingEnrollment = pendingInsert.rows[0];
+
+      // F14: Notificar al organizador
+      await pool.query(
+        `INSERT INTO notifications (user_id, message, type, session_id)
+         VALUES ($1, $2, 'approval_request', $3)`,
+        [
+          sessionRow.organizer_id,
+          `Nueva solicitud pendiente de aprobación: ${user.name} en "${sessionRow.title}".`,
+          sessionId,
+        ]
+      );
+
+      return NextResponse.json({
+        message: 'Solicitud enviada. Esta sesión requiere aprobación previa del organizador (F13).',
+        enrollment: pendingEnrollment,
+      });
+    }
+
     const result = await enrollmentService.enroll(sessionId, user.id);
 
     if (result.error) {

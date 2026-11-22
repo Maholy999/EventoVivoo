@@ -30,10 +30,11 @@ export async function POST(req: NextRequest) {
     }
 
     const status = body.status === 'published' ? 'published' : 'draft';
+    const requiresApproval = Boolean(body.requires_approval);
 
     const insertRes = await pool.query(
-      `INSERT INTO sessions (title, type, description, location, starts_at, ends_at, capacity, status, organizer_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO sessions (title, type, description, location, starts_at, ends_at, capacity, status, requires_approval, organizer_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         body.title.trim(),
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
         new Date(body.ends_at),
         Number(body.capacity),
         status,
+        requiresApproval,
         user.id,
       ]
     );

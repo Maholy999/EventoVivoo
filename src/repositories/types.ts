@@ -1,6 +1,6 @@
 export type SessionStatus = 'draft' | 'published' | 'cancelled';
 export type SessionType = 'taller' | 'hackatón' | 'conferencia' | 'encuentro';
-export type EnrollmentStatus = 'confirmed' | 'waitlisted' | 'cancelled';
+export type EnrollmentStatus = 'confirmed' | 'waitlisted' | 'cancelled' | 'pending';
 export type UserRole = 'participant' | 'organizer';
 
 export interface DbSession {
@@ -14,6 +14,7 @@ export interface DbSession {
   ends_at: Date;
   status: SessionStatus;
   organizer_id: string;
+  requires_approval?: boolean;
   created_at: Date;
   updated_at: Date;
 }

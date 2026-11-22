@@ -47,6 +47,13 @@ interface SessionDetail {
     enrolled_at: string;
     position: number;
   }[];
+  pending?: {
+    enrollment_id: string;
+    user_id: string;
+    name: string;
+    email: string;
+    enrolled_at: string;
+  }[];
   auditLogs: {
     id: string;
     action: string;
@@ -110,6 +117,7 @@ export default function OrganizerPage() {
     ends_at: '',
     capacity: 25,
     status: 'draft',
+    requires_approval: false,
   });
 
   const [editForm, setEditForm] = useState({
@@ -318,6 +326,43 @@ export default function OrganizerPage() {
       if (selectedSessionId === id) openSessionDetail(id);
     } catch {
       setActionMessage({ type: 'err', text: 'Error de red.' });
+    }
+  };
+
+  const handleApproveEnrollment = async (sessionId: string, enrollmentId: string) => {
+    try {
+      const res = await fetch(`/api/organizer/sessions/${sessionId}/enrollments/${enrollmentId}/approve`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al aprobar' });
+      } else {
+        setActionMessage({ type: 'ok', text: data.message });
+        await openSessionDetail(sessionId);
+        await loadDashboard();
+      }
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error de conexión al aprobar.' });
+    }
+  };
+
+  const handleRejectEnrollment = async (sessionId: string, enrollmentId: string) => {
+    if (!confirm('¿Rechazar esta solicitud de inscripción?')) return;
+    try {
+      const res = await fetch(`/api/organizer/sessions/${sessionId}/enrollments/${enrollmentId}/reject`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al rechazar' });
+      } else {
+        setActionMessage({ type: 'ok', text: data.message });
+        await openSessionDetail(sessionId);
+        await loadDashboard();
+      }
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error de conexión al rechazar.' });
     }
   };
 
@@ -833,6 +878,7 @@ export default function OrganizerPage() {
                   ends_at: eStr,
                   capacity: 25,
                   status: 'draft',
+                  requires_approval: false,
                 });
                 setShowCreateModal(true);
               }}
@@ -1206,6 +1252,52 @@ export default function OrganizerPage() {
 
           {sessionDetail && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+              {/* Solicitudes Pendientes de Aprobación (F13) */}
+              {sessionDetail.pending && sessionDetail.pending.length > 0 && (
+                <div style={{ gridColumn: '1 / -1', border: '2px solid #E8440F', padding: '16px', background: '#FFF8F6' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#E8440F', marginBottom: '8px' }}>
+                    Solicitudes Pendientes de Aprobación (F13) — {sessionDetail.pending.length} por revisar
+                  </h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ background: '#FFF0EB', textAlign: 'left' }}>
+                          <th style={{ padding: '6px 8px' }}>Nombre</th>
+                          <th style={{ padding: '6px 8px' }}>Correo</th>
+                          <th style={{ padding: '6px 8px' }}>Fecha Solicitud</th>
+                          <th style={{ padding: '6px 8px', textAlign: 'right' }}>Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sessionDetail.pending.map((p) => (
+                          <tr key={p.enrollment_id} style={{ borderBottom: '1px solid #FCE4DC' }}>
+                            <td style={{ padding: '6px 8px', fontWeight: 600 }}>{p.name}</td>
+                            <td style={{ padding: '6px 8px', color: '#5E584F' }}>{p.email}</td>
+                            <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)' }}>
+                              {new Date(p.enrolled_at).toLocaleString('es-ES')}
+                            </td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                              <button
+                                onClick={() => handleApproveEnrollment(sessionDetail.session.id, p.enrollment_id)}
+                                style={{ padding: '4px 10px', background: '#1E6B4F', color: '#FFFFFF', border: 'none', fontSize: '11px', cursor: 'pointer', marginRight: '6px' }}
+                              >
+                                ✓ Aprobar
+                              </button>
+                              <button
+                                onClick={() => handleRejectEnrollment(sessionDetail.session.id, p.enrollment_id)}
+                                style={{ padding: '4px 10px', background: '#FFFFFF', border: '1px solid #E8440F', color: '#E8440F', fontSize: '11px', cursor: 'pointer' }}
+                              >
+                                ✕ Rechazar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Columna 1: Participantes Confirmados */}
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #1E6B4F', paddingBottom: '6px', marginBottom: '12px' }}>
@@ -1431,6 +1523,18 @@ export default function OrganizerPage() {
                   <option value="draft">Borrador (oculta al público)</option>
                   <option value="published">Publicada (abierta a inscripciones)</option>
                 </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
+                <input
+                  type="checkbox"
+                  id="requires_approval"
+                  checked={createForm.requires_approval}
+                  onChange={(e) => setCreateForm({ ...createForm, requires_approval: e.target.checked })}
+                />
+                <label htmlFor="requires_approval" style={{ fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                  Requiere aprobación previa del organizador (F13)
+                </label>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
