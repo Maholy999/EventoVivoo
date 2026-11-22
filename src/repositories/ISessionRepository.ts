@@ -1,10 +1,12 @@
-import { DbSession, SessionStatus } from './types';
+import { DbSession, SessionStatus, SessionWithCounts, SessionWithStats } from './types';
 import { PoolClient } from 'pg';
 
 export interface ISessionRepository {
   findById(id: string): Promise<DbSession | null>;
   findByIdForUpdate(id: string, client: PoolClient): Promise<DbSession | null>;
   findPublished(): Promise<DbSession[]>;
+  findPublishedWithCounts(): Promise<SessionWithCounts[]>;
+  findByOrganizerWithStats(organizerId: string): Promise<SessionWithStats[]>;
   updateCapacity(id: string, newCapacity: number, client?: PoolClient): Promise<DbSession>;
   updateSchedule(
     id: string,
@@ -20,3 +22,4 @@ export interface ISessionRepository {
     client?: PoolClient
   ): Promise<{ id: string; userId: string; enrolledAt: Date }[]>;
 }
+

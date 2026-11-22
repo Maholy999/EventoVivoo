@@ -20,6 +20,14 @@ export async function POST(
       );
     }
 
+    // R13: Organizador no puede inscribirse ni entrar en lista de espera
+    if (user.role === 'organizer') {
+      return NextResponse.json(
+        { error: 'Acceso denegado: los organizadores no pueden inscribirse ni entrar en lista de espera (R13)' },
+        { status: 403 }
+      );
+    }
+
     const { id: sessionId } = await params;
     const sessionRepo = new SessionRepository(pool);
     const enrollmentRepo = new EnrollmentRepository(pool);

@@ -97,4 +97,38 @@ describe.skipIf(!isDbAvailable)('H3 Integración - R7, R8, R11, R12, F8', () => 
     expect(logs.length).toBeGreaterThan(0);
     expect(logs[0].action).toBe('capacity_reduction');
   });
+
+  it('R14: rechaza modificación de sesión si el organizador no es el dueño', async () => {
+    const org1 = await pool.query<{ id: string }>(
+      "INSERT INTO users (email, password_hash, role, name) VALUES ('org1@test.com', 'h', 'organizer', 'Org1') RETURNING id"
+    );
+    const org2 = await pool.query<{ id: string }>(
+      "INSERT INTO users (email, password_hash, role, name) VALUES ('org2@test.com', 'h', 'organizer', 'Org2') RETURNING id"
+    );
+
+    const s = await pool.query<{ id: string }>(
+      `INSERT INTO sessions (title, starts_at, ends_at, capacity, status, organizer_id)
+       VALUES ('Sesión Org1', '2026-03-01 10:00:00Z', '2026-03-01 12:00:00Z', 10, 'published', $1)
+       RETURNING id`,
+      [org1.rows[0].id]
+    );
+    const sId = s.rows[0].id;
+
+    // Org2 intenta reducir aforo de la sesión de Org1
+    const resReduce = await service.reduceCapacity({
+      sessionId: sId,
+      newCapacity: 5,
+      changedBy: org2.rows[0].id,
+    });
+    expect(resReduce.success).toBe(false);
+    expect(resReduce.error).toContain('R14');
+
+    // Org2 intenta cancelar la sesión de Org1
+    const resCancel = await service.cancelSession({
+      sessionId: sId,
+      changedBy: org2.rows[0].id,
+    });
+    expect(resCancel.success).toBe(false);
+    expect(resCancel.error).toContain('R14');
+  });
 });

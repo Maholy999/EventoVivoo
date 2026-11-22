@@ -10,6 +10,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Debes iniciar sesión' }, { status: 401 });
     }
 
+    // R13: Organizador no puede responder encuestas
+    if (user.role === 'organizer') {
+      return NextResponse.json(
+        { error: 'Acceso denegado: los organizadores no pueden responder encuestas (R13)' },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const enrollmentId = body.enrollmentId;
     const rating = Number(body.rating);

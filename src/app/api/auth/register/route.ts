@@ -9,11 +9,12 @@ export async function POST(req: NextRequest) {
     const userRepo = new UserRepository(pool);
     const authService = new AuthService(userRepo);
 
+    // R15: El registro público crea ÚNICAMENTE participantes
     const result = await authService.register({
       email: body.email,
       password: body.password,
       name: body.name,
-      role: body.role,
+      role: 'participant',
     });
 
     if (result.error || !result.user) {

@@ -105,30 +105,45 @@ Definidas en `.env.example`:
 
 ---
 
-## 👥 Usuarios y Datos de Prueba (Seed)
+## 👥 Usuarios y Datos de Prueba (Seed Realista)
 
-El comando `npm run db:seed` carga automáticamente los siguientes usuarios y escenarios para pruebas inmediatas:
+El comando `npm run db:seed` carga automáticamente un conjunto realista de datos para pruebas inmediatas y análisis de rendimiento:
 
 ### Usuarios Registrados
 
-| Rol | Correo | Contraseña | Estado Inicial en el Seed |
+| Rol | Correo | Contraseña | Detalle y Permisos |
 |---|---|---|---|
-| **Organizador** | `org@eventovivo.edu` | `Admin123!` | Administrador con acceso al panel y al lector de accesos |
-| **Participante** | `sofia@universidad.edu` | `Pass123!` | Confirmada en Sesión 1 (Web3) y Sesión 4 (Kubernetes) |
-| **Participante** | `carlos@universidad.edu` | `Pass123!` | Confirmado en Sesión 1 (Web3) |
-| **Participante** | `lucia@universidad.edu` | `Pass123!` | En lista de espera (Posición #1) en Sesión 1 |
-| **Participante** | `mateo@universidad.edu` | `Pass123!` | Confirmado en Sesión 2 (Taller IA) — genera choque con Sesión 3 |
-| **Participante** | `valentina@universidad.edu` | `Pass123!` | Confirmada en Sesión 4 (Kubernetes) |
-| **Participante** | `diego@universidad.edu` | `Pass123!` | Asistencia verificada y encuesta respondida (⭐ 5) en Sesión 5 |
+| **Organizador 1** | `org1@eventovivo.edu` | `Admin123!` | Dr. Roberto Salazar (Decano Ingeniería) - Dueño de sesiones S1, S2, S4, S7, S9, S11, S13 |
+| **Organizador 2** | `org2@eventovivo.edu` | `Admin123!` | Dra. Elena Vasquez (Dir. Ciberseguridad) - Dueña de sesiones S3, S5, S6, S8, S10, S12, S14 |
+| **Participante 1** | `participante1@universidad.edu` | `Pass123!` | Sofia Reyes - Confirmada en S1, S2, S4, S9, S14. Asistencia y encuesta registradas en S9 |
+| **Participante 26** | `participante26@universidad.edu` | `Pass123!` | Manuel Benitez - En lista de espera (Posición #1) en S1 (Hackatón Web3) |
+| **Participantes 1-50** | `participante[N]@universidad.edu` | `Pass123!` | 50 participantes generados con nombres reales e inscripciones distribuidas |
 
-### Sesiones Sembradas en la Agenda
+### Alta Administrativa de Organizadores (R15)
+Por regla de negocio (R15), el registro público (`/registro`) crea **exclusivamente participantes**. Para crear un nuevo organizador se utiliza el script administrativo CLI:
+```bash
+npx tsx scripts/create-organizer.ts <email> <password> "<nombre completo>"
 
-1. **Hackatón Web3: Contratos Inteligentes:** Aforo 2. **Estado: LLENA.** Confirmados: Sofia y Carlos. Lista de espera: Lucia (#1).
-2. **Taller de Inteligencia Artificial y LLMs:** Horario: 11:00 - 13:00. Capacidad: 20. Confirmado: Mateo.
-3. **Ciberseguridad Ofensiva: Red Teaming:** Horario: 12:00 - 14:00. **Choca directamente con el Taller de IA.**
-4. **Arquitectura Cloud Nativa con Kubernetes:** Aforo 4, 3 inscritos. **Estado: CASI LLENA (1 cupo libre).**
-5. **Diseño de Producto y Design Thinking:** Aforo 10. **Con asistencia real registrada para Diego y encuesta de satisfacción.**
-6. **Workshop de Rust para Sistemas Embebidos:** **Estado: BORRADOR (draft).** Oculta al público general.
+# Ejemplo:
+npx tsx scripts/create-organizer.ts nuevo.org@eventovivo.edu Admin123! "Dra. Carmen Morales"
+```
+
+### Sesiones Sembradas en la Agenda (14 Sesiones, Cupos 20 a 60)
+
+1. **Hackatón Web3: Contratos Inteligentes y DeFi:** Cupo 25. **Estado: LLENA (100%).** 25 confirmados + 7 en lista de espera.
+2. **Taller Avanzado de Agentes Inteligentes y LLMs:** Cupo 30. **Estado: CASI LLENA (93.3%).** 28 confirmados (2 plazas libres). Horario 11:00-13:00 (choca con S3).
+3. **Conferencia Magistral: El Futuro de la IA Generativa:** Cupo 50. 25 confirmados (50%). Horario 12:00-14:00 (**choca con S2**).
+4. **Taller: Microservicios y Cloud Native con Kubernetes:** Cupo 35. 21 confirmados (60%).
+5. **Encuentro de Comunidades Tech y Open Source:** Cupo 40. 16 confirmados (40%).
+6. **Conferencia: Seguridad Ofensiva y Amenazas Cuánticas:** Cupo 40. 30 confirmados (75%).
+7. **Taller: Visualización de Datos con React y Canvas:** Cupo 30. 11 confirmados (36.7%).
+8. **Encuentro de Investigación Doctoral y Postgrados:** Cupo 30. **Estado: CASI VACÍA (6.7%).** 2 confirmados.
+9. **Conferencia: Ética en Modelos de Lenguaje Masivos:** Cupo 40. 20 confirmados, **15 asistencias registradas y 10 encuestas de satisfacción completadas**.
+10. **Hackatón Universitario: Ciudades Inteligentes e IoT:** Cupo 40. **Estado: BORRADOR (draft).**
+11. **Taller de Criptografía de Curvas Elípticas:** Cupo 25. **Estado: CANCELADA.**
+12. **Encuentro de Liderazgo y Mentoría en Tecnología:** Cupo 30. 15 confirmados (50%).
+13. **Taller: Pruebas Automatizadas y Performance Testing:** Cupo 25. 16 confirmados (64%).
+14. **Conferencia de Clausura: Tendencias de Ingeniería 2027:** Cupo 60. 42 confirmados (70%).
 
 ---
 

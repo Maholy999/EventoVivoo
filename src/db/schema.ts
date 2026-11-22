@@ -23,6 +23,9 @@ export const users = pgTable('users', {
 export const sessions = pgTable('sessions', {
   id: uuid('id').defaultRandom().primaryKey(),
   title: text('title').notNull(),
+  type: text('type', { enum: ['taller', 'hackatón', 'conferencia', 'encuentro'] })
+    .notNull()
+    .default('taller'),
   description: text('description'),
   location: text('location'),
   starts_at: timestamp('starts_at').notNull(),

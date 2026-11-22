@@ -18,6 +18,14 @@ export async function POST(
       );
     }
 
+    // R13: Organizador no tiene inscripciones para cancelar
+    if (user.role === 'organizer') {
+      return NextResponse.json(
+        { error: 'Acceso denegado: los organizadores no pueden cancelar plazas (R13)' },
+        { status: 403 }
+      );
+    }
+
     const { id: sessionId } = await params;
     const sessionRepo = new SessionRepository(pool);
     const enrollmentRepo = new EnrollmentRepository(pool);

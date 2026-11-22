@@ -1,6 +1,6 @@
 import { Pool, PoolClient } from 'pg';
 import { ISessionRepository } from './ISessionRepository';
-import { DbSession, SessionStatus } from './types';
+import { DbSession, SessionStatus, SessionWithCounts, SessionWithStats } from './types';
 
 export class SessionRepository implements ISessionRepository {
   constructor(private pool: Pool) {}
@@ -28,6 +28,80 @@ export class SessionRepository implements ISessionRepository {
   async findPublished(): Promise<DbSession[]> {
     const res = await this.pool.query<DbSession>(
       "SELECT * FROM sessions WHERE status = 'published' ORDER BY starts_at ASC"
+    );
+    return res.rows;
+  }
+
+  async findPublishedWithCounts(): Promise<SessionWithCounts[]> {
+    const res = await this.pool.query<SessionWithCounts>(
+      `SELECT 
+        s.*,
+        COALESCE(e.confirmed_count, 0)::int AS confirmed_count,
+        COALESCE(e.waitlisted_count, 0)::int AS waitlisted_count,
+        COALESCE(a.attended_count, 0)::int AS attended_count
+      FROM sessions s
+      LEFT JOIN (
+        SELECT 
+          session_id,
+          COUNT(*) FILTER (WHERE status = 'confirmed') AS confirmed_count,
+          COUNT(*) FILTER (WHERE status = 'waitlisted') AS waitlisted_count
+        FROM enrollments
+        GROUP BY session_id
+      ) e ON e.session_id = s.id
+      LEFT JOIN (
+        SELECT 
+          e.session_id,
+          COUNT(a.id) AS attended_count
+        FROM enrollments e
+        JOIN attendances a ON a.enrollment_id = e.id
+        WHERE a.recorded_at IS NOT NULL
+        GROUP BY e.session_id
+      ) a ON a.session_id = s.id
+      WHERE s.status = 'published'
+      ORDER BY s.starts_at ASC`
+    );
+    return res.rows;
+  }
+
+  async findByOrganizerWithStats(organizerId: string): Promise<SessionWithStats[]> {
+    const res = await this.pool.query<SessionWithStats>(
+      `SELECT 
+        s.*,
+        COALESCE(e.confirmed_count, 0)::int AS confirmed_count,
+        COALESCE(e.waitlisted_count, 0)::int AS waitlisted_count,
+        COALESCE(a.attended_count, 0)::int AS attended_count,
+        COALESCE(sv.survey_avg, 0)::float AS survey_avg,
+        COALESCE(sv.survey_count, 0)::int AS survey_count
+      FROM sessions s
+      LEFT JOIN (
+        SELECT 
+          session_id,
+          COUNT(*) FILTER (WHERE status = 'confirmed') AS confirmed_count,
+          COUNT(*) FILTER (WHERE status = 'waitlisted') AS waitlisted_count
+        FROM enrollments
+        GROUP BY session_id
+      ) e ON e.session_id = s.id
+      LEFT JOIN (
+        SELECT 
+          e.session_id,
+          COUNT(a.id) AS attended_count
+        FROM enrollments e
+        JOIN attendances a ON a.enrollment_id = e.id
+        WHERE a.recorded_at IS NOT NULL
+        GROUP BY e.session_id
+      ) a ON a.session_id = s.id
+      LEFT JOIN (
+        SELECT 
+          e.session_id,
+          ROUND(AVG(sv.rating), 2) AS survey_avg,
+          COUNT(sv.id) AS survey_count
+        FROM enrollments e
+        JOIN surveys sv ON sv.enrollment_id = e.id
+        GROUP BY e.session_id
+      ) sv ON sv.session_id = s.id
+      WHERE s.organizer_id = $1
+      ORDER BY s.starts_at ASC`,
+      [organizerId]
     );
     return res.rows;
   }

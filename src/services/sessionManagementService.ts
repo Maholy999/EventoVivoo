@@ -39,6 +39,15 @@ export class SessionManagementService {
         return { success: false, error: 'Sesión no encontrada' };
       }
 
+      // R14: Solo el organizador propietario puede modificar su sesión
+      if (session.organizer_id !== params.changedBy) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          error: 'Acceso denegado: no tienes permisos para modificar sesiones ajenas (R14)',
+        };
+      }
+
       const attendanceCount = await this.sessionRepo.getAttendanceCount(params.sessionId, client);
       const confirmedAttendees = await this.sessionRepo.getConfirmedAttendees(params.sessionId, client);
       const waitlist = await this.enrollmentRepo.findWaitlistForSession(params.sessionId, client);
@@ -149,6 +158,15 @@ export class SessionManagementService {
         return { success: false, error: 'Sesión no encontrada' };
       }
 
+      // R14: Solo el organizador propietario puede modificar su sesión
+      if (session.organizer_id !== params.changedBy) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          error: 'Acceso denegado: no tienes permisos para modificar sesiones ajenas (R14)',
+        };
+      }
+
       const confirmedAttendees = await this.sessionRepo.getConfirmedAttendees(params.sessionId, client);
 
       const attendeesWithSchedule = await Promise.all(
@@ -243,6 +261,15 @@ export class SessionManagementService {
         return { success: false, error: 'Sesión no encontrada' };
       }
 
+      // R14: Solo el organizador propietario puede modificar su sesión
+      if (session.organizer_id !== params.changedBy) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          error: 'Acceso denegado: no tienes permisos para modificar sesiones ajenas (R14)',
+        };
+      }
+
       const transition = canTransitionSessionState(session.status, 'cancelled');
       if (!transition.allowed) {
         await client.query('ROLLBACK');
@@ -310,6 +337,15 @@ export class SessionManagementService {
       if (!session) {
         await client.query('ROLLBACK');
         return { success: false, error: 'Sesión no encontrada' };
+      }
+
+      // R14: Solo el organizador propietario puede modificar su sesión
+      if (session.organizer_id !== params.changedBy) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          error: 'Acceso denegado: no tienes permisos para modificar sesiones ajenas (R14)',
+        };
       }
 
       const transition = canTransitionSessionState(session.status, 'published');
