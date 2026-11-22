@@ -79,6 +79,30 @@ export async function POST(req: NextRequest) {
       [enrollmentId, rating, comment]
     );
 
+    // F14: Avisar al organizador de la sesión
+    try {
+      const sOwnerRes = await pool.query(
+        `SELECT s.id, s.title, s.organizer_id FROM sessions s
+         JOIN enrollments e ON e.session_id = s.id
+         WHERE e.id = $1`,
+        [enrollmentId]
+      );
+      if (sOwnerRes.rows.length > 0) {
+        const sRow = sOwnerRes.rows[0];
+        await pool.query(
+          `INSERT INTO notifications (user_id, message, type, session_id) VALUES ($1, $2, $3, $4)`,
+          [
+            sRow.organizer_id,
+            `Nueva encuesta en "${sRow.title}": ⭐ ${rating}/5${comment ? ` ("${comment.slice(0, 35)}...")` : ''}`,
+            'survey_received',
+            sRow.id,
+          ]
+        );
+      }
+    } catch (notifErr) {
+      console.error('Error enviando aviso F14 al organizador:', notifErr);
+    }
+
     return NextResponse.json({
       message: '¡Gracias por compartir tu opinión! Encuesta guardada exitosamente.',
     });

@@ -40,6 +40,24 @@ export async function POST(
       );
     }
 
+    // F14: Avisar al organizador de la sesión
+    try {
+      const targetSession = await sessionRepo.findById(sessionId);
+      if (targetSession) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, message, type, session_id) VALUES ($1, $2, $3, $4)`,
+          [
+            targetSession.organizer_id,
+            `El participante ${user.name} canceló su plaza en "${targetSession.title}".`,
+            'cancellation',
+            sessionId,
+          ]
+        );
+      }
+    } catch (notifErr) {
+      console.error('Error enviando aviso F14 al organizador:', notifErr);
+    }
+
     return NextResponse.json({
       message: 'Inscripción cancelada exitosamente.',
       promotedUserId: result.promotedUserId,

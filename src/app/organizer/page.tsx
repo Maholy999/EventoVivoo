@@ -1,21 +1,70 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useState, useTransition } from 'react';
+import { SegmentedMeter } from '../components/SegmentedMeter';
 
-interface DashboardSession {
+interface SessionData {
   id: string;
   title: string;
-  location: string;
+  type: string;
+  description: string | null;
+  location: string | null;
+  starts_at: string;
+  ends_at: string;
   capacity: number;
+  status: 'draft' | 'published' | 'cancelled';
+  organizer_id: string;
+  organizer_name: string;
   confirmed_count: number;
   waitlist_count: number;
   attended_count: number;
+  no_shows: number;
   occupancy_rate: number;
   attendance_rate: number;
+  survey_avg: number;
+  survey_count: number;
+  is_owner: boolean;
+  needs_attention: boolean;
+  attention_reasons: string[];
 }
 
-interface DashboardSurvey {
+interface SessionDetail {
+  session: SessionData;
+  confirmed: {
+    enrollment_id: string;
+    user_id: string;
+    name: string;
+    email: string;
+    enrolled_at: string;
+    qr_token: string;
+    attended_at: string | null;
+  }[];
+  waitlist: {
+    enrollment_id: string;
+    user_id: string;
+    name: string;
+    email: string;
+    enrolled_at: string;
+    position: number;
+  }[];
+  auditLogs: {
+    id: string;
+    action: string;
+    previous_value: Record<string, unknown> | null;
+    new_value: Record<string, unknown> | null;
+    created_at: string;
+    changed_by_name: string | null;
+  }[];
+  surveys: {
+    id: string;
+    rating: number;
+    comment: string | null;
+    created_at: string;
+    user_name: string;
+  }[];
+}
+
+interface SurveyGlobal {
   total: number;
   average_rating: number;
   recent: {
@@ -28,69 +77,253 @@ interface DashboardSurvey {
   }[];
 }
 
-export default function OrganizerDashboardPage() {
-  const [sessions, setSessions] = useState<DashboardSession[]>([]);
-  const [surveys, setSurveys] = useState<DashboardSurvey>({ total: 0, average_rating: 0, recent: [] });
+export default function OrganizerPage() {
+  const [activeTab, setActiveTab] = useState<'operacion' | 'mis_sesiones' | 'asistencia' | 'catalogo'>('operacion');
+  const [sessions, setSessions] = useState<SessionData[]>([]);
+  const [attentionSessions, setAttentionSessions] = useState<SessionData[]>([]);
+  const [surveys, setSurveys] = useState<SurveyGlobal>({ total: 0, average_rating: 0, recent: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
-  // Formulario de check-in manual / lector
+  // Filtro de Mis Sesiones
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'published' | 'cancelled'>('all');
+
+  // Detalle de Sesión
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // Modales
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingSession, setEditingSession] = useState<SessionData | null>(null);
+  const [reschedulingSession, setReschedulingSession] = useState<SessionData | null>(null);
+  const [reducingSession, setReducingSession] = useState<SessionData | null>(null);
+
+  // Form states
+  const [createForm, setCreateForm] = useState({
+    title: '',
+    type: 'taller',
+    description: '',
+    location: '',
+    starts_at: '',
+    ends_at: '',
+    capacity: 25,
+    status: 'draft',
+  });
+
+  const [editForm, setEditForm] = useState({
+    title: '',
+    type: 'taller',
+    description: '',
+    location: '',
+  });
+
+  const [rescheduleForm, setRescheduleForm] = useState({
+    starts_at: '',
+    ends_at: '',
+    location: '',
+  });
+
+  const [reduceForm, setReduceForm] = useState({
+    newCapacity: 20,
+  });
+
+  // Check-in manual
   const [checkInToken, setCheckInToken] = useState('');
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [checkInResult, setCheckInResult] = useState<{
     status: 'recorded' | 'already_registered' | 'error';
     message: string;
     attendee?: { name: string; email: string; session: string };
-    originalRecordedAt?: string;
+    original_recorded_at?: string;
   } | null>(null);
 
-  const refreshDashboard = async () => {
+  const [, startTransition] = useTransition();
+
+  const loadDashboard = async () => {
     try {
       const res = await fetch('/api/organizer/dashboard');
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(data.sessions || []);
-        setSurveys(data.surveys || { total: 0, average_rating: 0, recent: [] });
+      if (!res.ok) {
+        if (res.status === 403) {
+          throw new Error('403 Prohibido: Se requieren permisos de organizador para ver este panel.');
+        }
+        throw new Error('Error al cargar datos del panel');
       }
-    } catch {
-      // Ignorar errores en refresh en segundo plano
+      const data = await res.json();
+      setSessions(data.sessions || []);
+      setAttentionSessions(data.attentionSessions || []);
+      setSurveys(data.surveys || { total: 0, average_rating: 0, recent: [] });
+      setError(null);
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Error al conectar');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    let ignore = false;
-    async function load() {
-      try {
-        const res = await fetch('/api/organizer/dashboard');
-        if (!res.ok) {
-          if (res.status === 403) {
-            throw new Error('403 Prohibido: Se requieren permisos de organizador para ver este panel.');
-          }
-          throw new Error('Error al cargar métricas del panel');
-        }
-        const data = await res.json();
-        if (!ignore) {
-          setSessions(data.sessions || []);
-          setSurveys(data.surveys || { total: 0, average_rating: 0, recent: [] });
-          setLoading(false);
-        }
-      } catch (err: unknown) {
-        if (!ignore) {
-          setError((err as Error).message || 'Error al conectar');
-          setLoading(false);
-        }
-      }
-    }
-    load();
-    return () => {
-      ignore = true;
-    };
+    loadDashboard();
   }, []);
+
+  const openSessionDetail = async (id: string) => {
+    setSelectedSessionId(id);
+    setLoadingDetail(true);
+    setSessionDetail(null);
+    try {
+      const res = await fetch(`/api/organizer/sessions/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessionDetail(data);
+      } else {
+        setActionMessage({ type: 'err', text: 'No se pudo cargar el detalle de la sesión.' });
+      }
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error de red al cargar detalle.' });
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionMessage(null);
+    try {
+      const res = await fetch('/api/organizer/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al crear la sesión' });
+        return;
+      }
+      setShowCreateModal(false);
+      setActionMessage({ type: 'ok', text: `Sesión "${data.session.title}" creada exitosamente.` });
+      await loadDashboard();
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error de conexión al crear sesión.' });
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSession) return;
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/organizer/sessions/${editingSession.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al editar' });
+        return;
+      }
+      setEditingSession(null);
+      setActionMessage({ type: 'ok', text: 'Sesión actualizada correctamente.' });
+      await loadDashboard();
+      if (selectedSessionId === editingSession.id) openSessionDetail(editingSession.id);
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error al conectar con el servidor.' });
+    }
+  };
+
+  const handlePublish = async (id: string) => {
+    if (!confirm('¿Deseas publicar esta sesión en el catálogo general?')) return;
+    try {
+      const res = await fetch(`/api/organizer/sessions/${id}/publish`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al publicar' });
+        return;
+      }
+      setActionMessage({ type: 'ok', text: 'Sesión publicada exitosamente.' });
+      await loadDashboard();
+      if (selectedSessionId === id) openSessionDetail(id);
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error de red.' });
+    }
+  };
+
+  const handleRescheduleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reschedulingSession) return;
+    try {
+      const res = await fetch(`/api/organizer/sessions/${reschedulingSession.id}/reschedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rescheduleForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al reprogramar' });
+        return;
+      }
+      setReschedulingSession(null);
+      setActionMessage({
+        type: 'ok',
+        text: `Sesión reprogramada exitosamente. Se notificó a los inscritos.${
+          data.affectedUserIds?.length ? ` (${data.affectedUserIds.length} con choque de horario).` : ''
+        }`,
+      });
+      await loadDashboard();
+      if (selectedSessionId === reschedulingSession.id) openSessionDetail(reschedulingSession.id);
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error al conectar con el servidor.' });
+    }
+  };
+
+  const handleReduceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reducingSession) return;
+    try {
+      const res = await fetch(`/api/organizer/sessions/${reducingSession.id}/reduce-capacity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reduceForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al reducir aforo' });
+        return;
+      }
+      setReducingSession(null);
+      setActionMessage({
+        type: 'ok',
+        text: `Aforo reducido a ${reduceForm.newCapacity}. Se reordenó la lista y se avisó a los participantes degradados.`,
+      });
+      await loadDashboard();
+      if (selectedSessionId === reducingSession.id) openSessionDetail(reducingSession.id);
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error de conexión.' });
+    }
+  };
+
+  const handleCancelSession = async (id: string, title: string) => {
+    if (!confirm(`¿Estás seguro de cancelar definitivamente la sesión "${title}"? Se avisará a todos los inscritos.`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/organizer/sessions/${id}/cancel`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionMessage({ type: 'err', text: data.error || 'Error al cancelar' });
+        return;
+      }
+      setActionMessage({ type: 'ok', text: `La sesión "${title}" ha sido cancelada y se enviaron los avisos.` });
+      await loadDashboard();
+      if (selectedSessionId === id) openSessionDetail(id);
+    } catch {
+      setActionMessage({ type: 'err', text: 'Error de red.' });
+    }
+  };
 
   const handleCheckInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!checkInToken.trim()) return;
-
     setCheckInLoading(true);
     setCheckInResult(null);
 
@@ -101,329 +334,1291 @@ export default function OrganizerDashboardPage() {
         body: JSON.stringify({ token: checkInToken.trim() }),
       });
       const data = await res.json();
-
       if (!res.ok) {
         setCheckInResult({
           status: 'error',
-          message: data.error || 'Código inválido o participante no confirmado',
+          message: data.error || 'Error al registrar asistencia',
         });
       } else {
         setCheckInResult({
           status: data.status,
           message: data.message,
           attendee: data.attendee,
-          originalRecordedAt: data.original_recorded_at,
+          original_recorded_at: data.original_recorded_at,
         });
         setCheckInToken('');
-        // Recargar contadores del panel
-        refreshDashboard();
+        startTransition(() => {
+          loadDashboard();
+        });
       }
     } catch {
       setCheckInResult({
         status: 'error',
-        message: 'Error de conexión al procesar el código',
+        message: 'Error de conexión con el lector de credenciales',
       });
     } finally {
       setCheckInLoading(false);
     }
   };
 
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+
+  const mySessions = sessions.filter((s) => s.is_owner);
+  const filteredMySessions = mySessions.filter((s) => {
+    if (statusFilter === 'all') return true;
+    return s.status === statusFilter;
+  });
+
   if (loading) {
     return (
-      <div className="container" style={{ textAlign: 'center', padding: '80px 0' }}>
-        <p style={{ color: 'var(--text-muted)' }}>Cargando métricas y aforos del organizador...</p>
-      </div>
+      <main className="container" style={{ padding: '40px 16px' }}>
+        <div style={{ height: '24px', width: '200px', backgroundColor: '#DDD7CC', marginBottom: '16px' }} />
+        <div style={{ height: '80px', width: '100%', backgroundColor: '#F6F3EE', marginBottom: '24px' }} />
+        <div style={{ height: '300px', width: '100%', backgroundColor: '#F6F3EE' }} />
+      </main>
     );
   }
 
   if (error) {
     return (
-      <div className="container" style={{ maxWidth: '600px', textAlign: 'center', padding: '60px 20px' }}>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--accent-red)', borderRadius: '16px', padding: '30px' }}>
-          <h2 className="font-display" style={{ color: 'var(--accent-red)', marginBottom: '12px' }}>Acceso Restringido</h2>
-          <p style={{ color: 'var(--text-light)', marginBottom: '20px' }}>{error}</p>
-          <Link href="/" className="btn-secondary">Volver a la Agenda</Link>
-        </div>
-      </div>
+      <main className="container" style={{ padding: '60px 16px', textAlign: 'center' }}>
+        <h2 style={{ fontSize: '20px', marginBottom: '12px' }}>Acceso Restringido</h2>
+        <p style={{ color: '#5E584F', marginBottom: '24px' }}>{error}</p>
+        <a
+          href="/login"
+          style={{
+            display: 'inline-block',
+            padding: '10px 20px',
+            background: '#16130F',
+            color: '#FFFFFF',
+            textDecoration: 'none',
+            fontSize: '13px',
+            fontWeight: 600,
+          }}
+        >
+          Iniciar sesión como Organizador
+        </a>
+      </main>
     );
   }
 
   return (
-    <div className="container">
-      {/* Cabecera del Panel */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '28px' }}>
+    <main className="container" style={{ padding: '24px 16px 80px' }}>
+      {/* Encabezado del Panel de Organizador */}
+      <div
+        style={{
+          borderBottom: '2px solid #16130F',
+          paddingBottom: '16px',
+          marginBottom: '24px',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: '12px',
+        }}
+      >
         <div>
           <span
             style={{
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              color: 'var(--primary)',
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: '11px',
               textTransform: 'uppercase',
-              letterSpacing: '0.1em',
+              letterSpacing: '0.08em',
+              color: '#5E584F',
             }}
           >
-            Consola de Control en Vivo
+            Panel de Control del Organizador
           </span>
-          <h1 className="font-display" style={{ fontSize: '2.2rem', fontWeight: 700 }}>
-            Panel de Ocupación y Acreditación
+          <h1 style={{ fontSize: '26px', fontWeight: 700, margin: '4px 0 0' }}>
+            Operación en vivo
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '2px' }}>
-            Control en tiempo real de cupos, asistencia y resultados de satisfacción.
-          </p>
         </div>
 
-        {/* Botón Exportar CSV (F9) */}
-        <a
-          href="/api/organizer/export-csv"
-          download="asistencia_eventovivo.csv"
-          className="btn-primary"
-          style={{ fontSize: '0.9rem', padding: '10px 18px' }}
-        >
-          📊 Exportar Asistencia (CSV)
-        </a>
+        {/* Pestañas de navegación interna */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => { setActiveTab('operacion'); setSelectedSessionId(null); }}
+            style={{
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: '1px solid #16130F',
+              background: activeTab === 'operacion' ? '#16130F' : '#FFFFFF',
+              color: activeTab === 'operacion' ? '#FFFFFF' : '#16130F',
+              borderRadius: '2px',
+            }}
+          >
+            Operación en vivo
+          </button>
+          <button
+            onClick={() => { setActiveTab('mis_sesiones'); setSelectedSessionId(null); }}
+            style={{
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: '1px solid #16130F',
+              background: activeTab === 'mis_sesiones' ? '#16130F' : '#FFFFFF',
+              color: activeTab === 'mis_sesiones' ? '#FFFFFF' : '#16130F',
+              borderRadius: '2px',
+            }}
+          >
+            Mis sesiones ({mySessions.length})
+          </button>
+          <button
+            onClick={() => { setActiveTab('asistencia'); setSelectedSessionId(null); }}
+            style={{
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: '1px solid #16130F',
+              background: activeTab === 'asistencia' ? '#16130F' : '#FFFFFF',
+              color: activeTab === 'asistencia' ? '#FFFFFF' : '#16130F',
+              borderRadius: '2px',
+            }}
+          >
+            Asistencia / Acreditación
+          </button>
+          <button
+            onClick={() => { setActiveTab('catalogo'); setSelectedSessionId(null); }}
+            style={{
+              padding: '6px 14px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: '1px solid #16130F',
+              background: activeTab === 'catalogo' ? '#16130F' : '#FFFFFF',
+              color: activeTab === 'catalogo' ? '#FFFFFF' : '#16130F',
+              borderRadius: '2px',
+            }}
+          >
+            Catálogo global (Lectura)
+          </button>
+        </div>
       </div>
 
-      {/* Módulo de Check-in en Puerta (Idempotente R6 / R9) */}
-      <section
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '24px',
-          marginBottom: '32px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-        }}
-      >
-        <div style={{ marginBottom: '16px' }}>
-          <h2 className="font-display" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)' }}>
-            ⚡ Registro de Acceso en Puerta (Lector QR / Código Manual)
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Ingresa el token de 32 caracteres del gafete o escanéalo con un lector de código de barras.
-          </p>
-        </div>
-
-        <form onSubmit={handleCheckInSubmit} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            placeholder="Pegar o escanear token QR (ej: a1b2c3d4...)"
-            value={checkInToken}
-            onChange={(e) => setCheckInToken(e.target.value)}
-            disabled={checkInLoading}
-            style={{
-              flex: '1 1 320px',
-              background: 'var(--bg-main)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '12px 16px',
-              color: 'var(--text-light)',
-              fontSize: '0.95rem',
-              fontFamily: 'monospace',
-            }}
-          />
+      {/* Avisos o mensajes de acción */}
+      {actionMessage && (
+        <div
+          style={{
+            padding: '12px 16px',
+            marginBottom: '20px',
+            border: `1px solid ${actionMessage.type === 'ok' ? '#1E6B4F' : '#E8440F'}`,
+            background: actionMessage.type === 'ok' ? '#F4FBF7' : '#FFF5F2',
+            color: actionMessage.type === 'ok' ? '#1E6B4F' : '#E8440F',
+            fontSize: '13px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>{actionMessage.text}</span>
           <button
-            type="submit"
-            disabled={checkInLoading || !checkInToken.trim()}
-            className="btn-primary"
-            style={{ padding: '12px 24px' }}
+            onClick={() => setActionMessage(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
           >
-            {checkInLoading ? 'Verificando...' : 'Validar Entrada'}
+            ✕
           </button>
-        </form>
+        </div>
+      )}
 
-        {/* Resultado del Check-in */}
-        {checkInResult && (
-          <div
-            role="status"
-            style={{
-              marginTop: '16px',
-              padding: '16px',
-              borderRadius: '10px',
-              background:
-                checkInResult.status === 'recorded'
-                  ? 'rgba(72, 229, 194, 0.15)'
-                  : checkInResult.status === 'already_registered'
-                  ? 'rgba(243, 156, 18, 0.15)'
-                  : 'rgba(231, 76, 60, 0.15)',
-              border: `1px solid ${
-                checkInResult.status === 'recorded'
-                  ? 'var(--primary)'
-                  : checkInResult.status === 'already_registered'
-                  ? 'var(--accent-amber)'
-                  : 'var(--accent-red)'
-              }`,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <strong
+      {/* VISTA 1: OPERACIÓN EN VIVO (Diseñada para leerse en 5 segundos) */}
+      {activeTab === 'operacion' && !selectedSessionId && (
+        <section>
+          {/* Franja "Requieren atención" */}
+          {attentionSessions.length > 0 && (
+            <div
+              style={{
+                border: '2px solid #E8440F',
+                background: '#FFF8F6',
+                padding: '14px 18px',
+                marginBottom: '24px',
+                borderRadius: '2px',
+              }}
+            >
+              <div
                 style={{
-                  color:
-                    checkInResult.status === 'recorded'
-                      ? 'var(--primary)'
-                      : checkInResult.status === 'already_registered'
-                      ? 'var(--accent-amber)'
-                      : 'var(--accent-red)',
-                  fontSize: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '10px',
+                  color: '#E8440F',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontFamily: 'var(--font-mono, monospace)',
                 }}
               >
-                {checkInResult.status === 'recorded' && '✓ ENTRADA REGISTRADA'}
-                {checkInResult.status === 'already_registered' && '⚠️ ENTRADA YA REGISTRADA (IDEMPOTENTE)'}
-                {checkInResult.status === 'error' && '✕ ACCESO DENEGADO'}
-              </strong>
-              {checkInResult.originalRecordedAt && (
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Primer ingreso: {new Date(checkInResult.originalRecordedAt).toLocaleTimeString()}
-                </span>
-              )}
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '8px',
+                    height: '8px',
+                    backgroundColor: '#E8440F',
+                    borderRadius: '50%',
+                  }}
+                />
+                Requieren atención inmediata ({attentionSessions.length} sesiones)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px' }}>
+                {attentionSessions.map((s) => (
+                  <div
+                    key={`att-${s.id}`}
+                    style={{
+                      border: '1px solid #E8440F',
+                      padding: '10px 12px',
+                      background: '#FFFFFF',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{s.title}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
+                      {s.attention_reasons.map((r, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            background: '#FFF0EB',
+                            color: '#E8440F',
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            fontFamily: 'var(--font-mono, monospace)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {r}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => openSessionDetail(s.id)}
+                      style={{
+                        padding: '4px 8px',
+                        background: '#16130F',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Ver detalle / gestionar →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Resumen numérico rápido */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: '12px',
+              marginBottom: '24px',
+            }}
+          >
+            <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
+              <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
+                Total Sesiones
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
+                {sessions.length}
+              </div>
+            </div>
+            <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
+              <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
+                Inscritos Confirmados
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
+                {sessions.reduce((acc, s) => acc + s.confirmed_count, 0)}
+              </div>
+            </div>
+            <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
+              <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
+                En Lista de Espera
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
+                {sessions.reduce((acc, s) => acc + s.waitlist_count, 0)}
+              </div>
+            </div>
+            <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
+              <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
+                Asistencia Verificada
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
+                {sessions.reduce((acc, s) => acc + s.attended_count, 0)}
+              </div>
+            </div>
+            <div style={{ border: '1px solid #DDD7CC', padding: '12px', background: '#F6F3EE' }}>
+              <div style={{ fontSize: '11px', color: '#5E584F', textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>
+                Satisfacción Global
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono, monospace)' }}>
+                ⭐ {surveys.average_rating > 0 ? surveys.average_rating.toFixed(1) : '—'}
+                <span style={{ fontSize: '12px', color: '#5E584F', fontWeight: 400 }}> ({surveys.total})</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla compacta de sesiones en vivo */}
+          <div style={{ border: '1px solid #16130F', background: '#FFFFFF' }}>
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #DDD7CC',
+                background: '#F6F3EE',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontWeight: 700, fontSize: '14px' }}>
+                Monitoreo de Sesiones en Vivo
+              </span>
+              <a
+                href="/api/organizer/export-csv"
+                style={{
+                  padding: '6px 12px',
+                  background: '#FFFFFF',
+                  color: '#16130F',
+                  border: '1px solid #16130F',
+                  fontSize: '12px',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                }}
+              >
+                Exportar CSV general
+              </a>
             </div>
 
-            <p style={{ marginTop: '6px', fontSize: '0.9rem' }}>{checkInResult.message}</p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ background: '#FAF8F5', borderBottom: '1px solid #DDD7CC', textAlign: 'left' }}>
+                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>HORARIO</th>
+                    <th style={{ padding: '10px 12px' }}>SESIÓN</th>
+                    <th style={{ padding: '10px 12px', minWidth: '160px' }}>OCUPACIÓN (BARRA SEGMENTADA)</th>
+                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>CONF / ASIST</th>
+                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>NO-SHOWS</th>
+                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>ESPERA</th>
+                    <th style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '11px' }}>ENCUESTAS</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>ACCIÓN</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((s, idx) => (
+                    <tr
+                      key={s.id}
+                      style={{
+                        borderBottom: '1px solid #EEE9DF',
+                        background: idx % 2 === 0 ? '#FFFFFF' : '#FAF8F5',
+                      }}
+                    >
+                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                        <div>{formatDate(s.starts_at)}</div>
+                        <div style={{ color: '#5E584F' }}>{formatTime(s.starts_at)} - {formatTime(s.ends_at)}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ fontWeight: 600 }}>{s.title}</div>
+                        <div style={{ fontSize: '11px', color: '#5E584F' }}>
+                          <span style={{ textTransform: 'uppercase', fontFamily: 'var(--font-mono, monospace)' }}>{s.type}</span> · {s.location || 'Sin sala'}
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <SegmentedMeter capacity={s.capacity} confirmed={s.confirmed_count} waitlisted={s.waitlist_count} />
+                      </td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
+                        <strong>{s.confirmed_count}</strong> / <span style={{ color: '#1E6B4F' }}>{s.attended_count}</span>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px', color: s.no_shows > 0 ? '#B7700B' : '#5E584F' }}>
+                        {s.no_shows}
+                      </td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
+                        {s.waitlist_count > 0 ? (
+                          <span style={{ fontWeight: 700, color: '#E8440F' }}>{s.waitlist_count}</span>
+                        ) : (
+                          '0'
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
+                        {s.survey_count > 0 ? (
+                          <span>⭐ {s.survey_avg.toFixed(1)} ({s.survey_count})</span>
+                        ) : (
+                          <span style={{ color: '#8A8378' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => openSessionDetail(s.id)}
+                          style={{
+                            padding: '4px 10px',
+                            background: '#16130F',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Ver detalle
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
 
-            {checkInResult.attendee && (
-              <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-light)' }}>
-                <strong>Asistente:</strong> {checkInResult.attendee.name} ({checkInResult.attendee.email}) &bull;{' '}
-                <strong>Sesión:</strong> {checkInResult.attendee.session}
+      {/* VISTA 2: MIS SESIONES (CRUD completo y gestión) */}
+      {activeTab === 'mis_sesiones' && !selectedSessionId && (
+        <section>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '16px',
+            }}
+          >
+            {/* Filtros de estado */}
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {(['all', 'published', 'draft', 'cancelled'] as const).map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatusFilter(st)}
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    border: '1px solid #16130F',
+                    background: statusFilter === st ? '#16130F' : '#FFFFFF',
+                    color: statusFilter === st ? '#FFFFFF' : '#16130F',
+                  }}
+                >
+                  {st === 'all' && `Todas (${mySessions.length})`}
+                  {st === 'published' && `Publicadas (${mySessions.filter((s) => s.status === 'published').length})`}
+                  {st === 'draft' && `Borradores (${mySessions.filter((s) => s.status === 'draft').length})`}
+                  {st === 'cancelled' && `Canceladas (${mySessions.filter((s) => s.status === 'cancelled').length})`}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const sStr = new Date(tomorrow.setHours(10, 0, 0, 0)).toISOString().slice(0, 16);
+                const eStr = new Date(tomorrow.setHours(12, 0, 0, 0)).toISOString().slice(0, 16);
+                setCreateForm({
+                  title: '',
+                  type: 'taller',
+                  description: '',
+                  location: '',
+                  starts_at: sStr,
+                  ends_at: eStr,
+                  capacity: 25,
+                  status: 'draft',
+                });
+                setShowCreateModal(true);
+              }}
+              style={{
+                padding: '8px 16px',
+                background: '#E8440F',
+                color: '#FFFFFF',
+                border: 'none',
+                fontWeight: 600,
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              ➕ Crear nueva sesión
+            </button>
+          </div>
+
+          {filteredMySessions.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', border: '1px solid #DDD7CC', background: '#F6F3EE' }}>
+              <p style={{ color: '#5E584F' }}>No hay sesiones en esta categoría.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {filteredMySessions.map((s) => (
+                <div
+                  key={s.id}
+                  style={{
+                    border: '1px solid #16130F',
+                    padding: '16px',
+                    background: '#FFFFFF',
+                    borderLeft: s.status === 'cancelled' ? '6px solid #8A8378' : s.status === 'draft' ? '6px dashed #5E584F' : '6px solid #16130F',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontFamily: 'var(--font-mono, monospace)',
+                            textTransform: 'uppercase',
+                            fontWeight: 700,
+                            padding: '2px 6px',
+                            border: '1px solid #16130F',
+                            background: s.status === 'published' ? '#16130F' : '#FFFFFF',
+                            color: s.status === 'published' ? '#FFFFFF' : '#16130F',
+                          }}
+                        >
+                          {s.status}
+                        </span>
+                        <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', color: '#5E584F' }}>
+                          {s.type}
+                        </span>
+                      </div>
+                      <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 4px' }}>{s.title}</h3>
+                      <div style={{ fontSize: '12px', color: '#5E584F' }}>
+                        <span>📍 {s.location || 'Sin sala'}</span> ·{' '}
+                        <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                          {formatDate(s.starts_at)} {formatTime(s.starts_at)} - {formatTime(s.ends_at)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Barra de aforo */}
+                    <div style={{ width: '220px' }}>
+                      <SegmentedMeter capacity={s.capacity} confirmed={s.confirmed_count} waitlisted={s.waitlist_count} />
+                    </div>
+                  </div>
+
+                  {s.description && (
+                    <p style={{ fontSize: '13px', color: '#16130F', margin: '8px 0 14px', lineHeight: 1.4 }}>
+                      {s.description}
+                    </p>
+                  )}
+
+                  {/* Acciones directas del organizador */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingTop: '10px', borderTop: '1px solid #DDD7CC' }}>
+                    <button
+                      onClick={() => openSessionDetail(s.id)}
+                      style={{
+                        padding: '5px 12px',
+                        background: '#16130F',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Asistencia y Detalle ({s.confirmed_count})
+                    </button>
+
+                    {s.status === 'draft' && (
+                      <button
+                        onClick={() => handlePublish(s.id)}
+                        style={{
+                          padding: '5px 12px',
+                          background: '#1E6B4F',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ✓ Publicar
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setEditingSession(s);
+                        setEditForm({
+                          title: s.title,
+                          type: s.type,
+                          description: s.description || '',
+                          location: s.location || '',
+                        });
+                      }}
+                      style={{
+                        padding: '5px 12px',
+                        background: '#FFFFFF',
+                        color: '#16130F',
+                        border: '1px solid #16130F',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Editar datos
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setReschedulingSession(s);
+                        setRescheduleForm({
+                          starts_at: new Date(s.starts_at).toISOString().slice(0, 16),
+                          ends_at: new Date(s.ends_at).toISOString().slice(0, 16),
+                          location: s.location || '',
+                        });
+                      }}
+                      style={{
+                        padding: '5px 12px',
+                        background: '#FFFFFF',
+                        color: '#16130F',
+                        border: '1px solid #16130F',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Reprogramar (R8)
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setReducingSession(s);
+                        setReduceForm({ newCapacity: Math.max(1, s.capacity - 5) });
+                      }}
+                      style={{
+                        padding: '5px 12px',
+                        background: '#FFFFFF',
+                        color: '#16130F',
+                        border: '1px solid #16130F',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Reducir aforo (R7)
+                    </button>
+
+                    {s.status !== 'cancelled' && (
+                      <button
+                        onClick={() => handleCancelSession(s.id, s.title)}
+                        style={{
+                          padding: '5px 12px',
+                          background: '#FFF5F2',
+                          color: '#E8440F',
+                          border: '1px solid #E8440F',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          marginLeft: 'auto',
+                        }}
+                      >
+                        Cancelar sesión (R12)
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* VISTA 3: ASISTENCIA Y ACREDITACIÓN QR */}
+      {activeTab === 'asistencia' && (
+        <section style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <div style={{ border: '2px solid #16130F', background: '#FFFFFF', padding: '24px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 700, margin: '0 0 8px' }}>
+              Acreditación y Control de Acceso
+            </h2>
+            <p style={{ fontSize: '13px', color: '#5E584F', marginBottom: '20px' }}>
+              Escanea el código QR de la credencial o ingresa el código manual de 128 bits para registrar la asistencia. La validación es idempotente.
+            </p>
+
+            <form onSubmit={handleCheckInSubmit} style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+              <input
+                type="text"
+                value={checkInToken}
+                onChange={(e) => setCheckInToken(e.target.value)}
+                placeholder="Código QR o token manual (ej. 3b9a1e8f...)"
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  border: '1px solid #16130F',
+                  fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: '14px',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={checkInLoading || !checkInToken.trim()}
+                style={{
+                  padding: '10px 18px',
+                  background: '#16130F',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                {checkInLoading ? 'Verificando…' : 'Validar Entrada'}
+              </button>
+            </form>
+
+            {checkInResult && (
+              <div
+                style={{
+                  border: `2px solid ${checkInResult.status === 'recorded' ? '#1E6B4F' : checkInResult.status === 'already_registered' ? '#B7700B' : '#E8440F'}`,
+                  padding: '16px',
+                  background: checkInResult.status === 'recorded' ? '#F4FBF7' : checkInResult.status === 'already_registered' ? '#FFFDF0' : '#FFF5F2',
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '6px' }}>
+                  {checkInResult.status === 'recorded' && '✓ ACCESO PERMITIDO — Asistencia Registrada'}
+                  {checkInResult.status === 'already_registered' && '⚠️ ACCESO YA REGISTRADO PREVIAMENTE'}
+                  {checkInResult.status === 'error' && '✕ DENEGADO — Credencial no válida'}
+                </div>
+                <p style={{ margin: '0 0 8px', fontSize: '13px' }}>{checkInResult.message}</p>
+                {checkInResult.attendee && (
+                  <div style={{ fontSize: '12px', borderTop: '1px solid #DDD7CC', paddingTop: '8px' }}>
+                    <div><strong>Participante:</strong> {checkInResult.attendee.name} ({checkInResult.attendee.email})</div>
+                    <div><strong>Sesión:</strong> {checkInResult.attendee.session}</div>
+                    {checkInResult.original_recorded_at && (
+                      <div><strong>Ingreso inicial:</strong> {new Date(checkInResult.original_recorded_at).toLocaleTimeString('es-ES')}</div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
-      {/* Tarjetas Comparativas de Ocupación vs Asistencia */}
-      <div style={{ marginBottom: '32px' }}>
-        <h2 className="font-display" style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: '16px' }}>
-          Ocupación de Aforo vs. Asistencia Real en Sala
-        </h2>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '18px' }}>
-          {sessions.map((s) => (
-            <div
-              key={s.id}
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '12px',
-                padding: '18px',
-              }}
-            >
-              <h3 className="font-display" style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '4px' }}>
-                {s.title}
-              </h3>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                📍 {s.location || 'Auditorio Central'} &bull; Capacidad total: <strong>{s.capacity}</strong>
-              </p>
-
-              {/* Barra de Inscripción / Ocupación */}
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-                  <span style={{ color: 'var(--primary)' }}>Inscritos Confirmados</span>
-                  <strong>{s.confirmed_count} / {s.capacity} ({s.occupancy_rate}%)</strong>
-                </div>
-                <div style={{ height: '8px', width: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${Math.min(100, s.occupancy_rate)}%`,
-                      background: 'var(--primary)',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Barra de Asistencia Real en Puerta */}
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-                  <span style={{ color: 'var(--accent-amber)' }}>Asistencias Verificadas (QR)</span>
-                  <strong>{s.attended_count} / {s.confirmed_count || 1} ({s.attendance_rate}%)</strong>
-                </div>
-                <div style={{ height: '8px', width: '100%', background: 'rgba(255,255,255,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${Math.min(100, s.attendance_rate)}%`,
-                      background: 'var(--accent-amber)',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Conteo de lista de espera */}
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'right' }}>
-                En lista de espera: <strong>{s.waitlist_count}</strong>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Sección de Encuestas de Satisfacción (R10) */}
-      <section
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '24px',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-          <div>
-            <h2 className="font-display" style={{ fontSize: '1.3rem', fontWeight: 700 }}>
-              Encuesta Breve de Satisfacción (R10)
-            </h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Solo participantes con asistencia registrada pueden calificar.
-            </p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--primary)' }}>
-              ⭐ {surveys.average_rating.toFixed(1)} / 5.0
-            </span>
-            <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              Basado en {surveys.total} respuestas
+      {/* VISTA 4: CATÁLOGO GLOBAL EN SOLO LECTURA (R14) */}
+      {activeTab === 'catalogo' && !selectedSessionId && (
+        <section>
+          <div style={{ padding: '12px 16px', background: '#F6F3EE', border: '1px solid #DDD7CC', marginBottom: '16px' }}>
+            <span style={{ fontSize: '13px', color: '#5E584F' }}>
+              ℹ️ Estás viendo el catálogo completo del evento en <strong>Modo Lectura</strong> (R14). Solo puedes gestionar y editar las sesiones donde eres el organizador creador.
             </span>
           </div>
-        </div>
 
-        {surveys.recent.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
-            Aún no se han recibido encuestas para las sesiones actuales.
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {surveys.recent.map((sv) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+            {sessions.map((s) => (
               <div
-                key={sv.id}
+                key={s.id}
                 style={{
-                  background: 'var(--bg-main)',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  border: '1px solid #16130F',
+                  padding: '14px',
+                  background: '#FFFFFF',
                 }}
               >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                    <span style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                      {'★'.repeat(sv.rating)}{'☆'.repeat(5 - sv.rating)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', color: '#5E584F' }}>
+                    {s.type} · {s.status}
+                  </span>
+                  {s.is_owner && (
+                    <span style={{ fontSize: '10px', background: '#16130F', color: '#FFFFFF', padding: '2px 6px', fontWeight: 600 }}>
+                      MI SESIÓN
                     </span>
-                    <strong style={{ fontSize: '0.88rem' }}>{sv.session_title}</strong>
-                  </div>
-                  {sv.comment && (
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', fontStyle: 'italic' }}>
-                      &ldquo;{sv.comment}&rdquo;
-                    </p>
                   )}
                 </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {sv.attendee_name}
-                </span>
+                <h4 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 6px' }}>{s.title}</h4>
+                <div style={{ fontSize: '12px', color: '#5E584F', marginBottom: '10px' }}>
+                  Organiza: <strong>{s.organizer_name}</strong>
+                </div>
+                <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono, monospace)', marginBottom: '12px' }}>
+                  {formatDate(s.starts_at)} {formatTime(s.starts_at)} - {formatTime(s.ends_at)}
+                </div>
+                <SegmentedMeter capacity={s.capacity} confirmed={s.confirmed_count} waitlisted={s.waitlist_count} />
+                <div style={{ marginTop: '12px', paddingTop: '8px', borderTop: '1px solid #EEE', textAlign: 'right' }}>
+                  <button
+                    onClick={() => openSessionDetail(s.id)}
+                    style={{
+                      padding: '4px 8px',
+                      background: 'none',
+                      border: '1px solid #16130F',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Ver detalles →
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        )}
-      </section>
-    </div>
+        </section>
+      )}
+
+      {/* DETALLE COMPLETO DE UNA SESIÓN (Inscritos, Espera, Auditoría y Encuestas) */}
+      {selectedSessionId && (
+        <section style={{ border: '2px solid #16130F', background: '#FFFFFF', padding: '20px', marginTop: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #16130F', paddingBottom: '12px', marginBottom: '16px' }}>
+            <div>
+              <button
+                onClick={() => setSelectedSessionId(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: '#5E584F',
+                  padding: 0,
+                  marginBottom: '6px',
+                  textDecoration: 'underline',
+                }}
+              >
+                ← Volver al listado
+              </button>
+              <h2 style={{ fontSize: '22px', fontWeight: 700, margin: 0 }}>
+                {sessionDetail?.session.title || 'Cargando sesión…'}
+              </h2>
+              {sessionDetail && (
+                <div style={{ fontSize: '12px', color: '#5E584F', marginTop: '4px' }}>
+                  {sessionDetail.session.location || 'Sin sala'} · {formatDate(sessionDetail.session.starts_at)}{' '}
+                  {formatTime(sessionDetail.session.starts_at)} - {formatTime(sessionDetail.session.ends_at)}
+                </div>
+              )}
+            </div>
+
+            {sessionDetail && (
+              <a
+                href={`/api/organizer/export-csv?sessionId=${sessionDetail.session.id}`}
+                style={{
+                  padding: '6px 14px',
+                  background: '#16130F',
+                  color: '#FFFFFF',
+                  textDecoration: 'none',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                }}
+              >
+                📥 Descargar CSV de asistencia
+              </a>
+            )}
+          </div>
+
+          {loadingDetail && <p style={{ color: '#5E584F' }}>Cargando datos detallados de la sesión…</p>}
+
+          {sessionDetail && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+              {/* Columna 1: Participantes Confirmados */}
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #1E6B4F', paddingBottom: '6px', marginBottom: '12px' }}>
+                  Inscritos Confirmados ({sessionDetail.confirmed.length} / {sessionDetail.session.capacity})
+                </h3>
+                {sessionDetail.confirmed.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: '#5E584F' }}>Sin inscritos confirmados aún.</p>
+                ) : (
+                  <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid #DDD7CC' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ background: '#F6F3EE', borderBottom: '1px solid #DDD7CC', textAlign: 'left' }}>
+                          <th style={{ padding: '6px 8px' }}>Nombre</th>
+                          <th style={{ padding: '6px 8px' }}>Correo</th>
+                          <th style={{ padding: '6px 8px' }}>Asistencia</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sessionDetail.confirmed.map((c) => (
+                          <tr key={c.enrollment_id} style={{ borderBottom: '1px solid #EEE' }}>
+                            <td style={{ padding: '6px 8px', fontWeight: 600 }}>{c.name}</td>
+                            <td style={{ padding: '6px 8px', color: '#5E584F' }}>{c.email}</td>
+                            <td style={{ padding: '6px 8px' }}>
+                              {c.attended_at ? (
+                                <span style={{ color: '#1E6B4F', fontWeight: 600 }}>
+                                  ✓ {new Date(c.attended_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#8A8378' }}>Pendiente</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Columna 2: Lista de espera en orden FIFO */}
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #E8440F', paddingBottom: '6px', marginBottom: '12px' }}>
+                  Lista de Espera en Orden FIFO ({sessionDetail.waitlist.length})
+                </h3>
+                {sessionDetail.waitlist.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: '#5E584F' }}>No hay participantes en espera.</p>
+                ) : (
+                  <div style={{ maxHeight: '340px', overflowY: 'auto', border: '1px solid #DDD7CC' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                      <thead>
+                        <tr style={{ background: '#F6F3EE', borderBottom: '1px solid #DDD7CC', textAlign: 'left' }}>
+                          <th style={{ padding: '6px 8px', fontFamily: 'var(--font-mono, monospace)' }}>#</th>
+                          <th style={{ padding: '6px 8px' }}>Nombre</th>
+                          <th style={{ padding: '6px 8px' }}>Correo</th>
+                          <th style={{ padding: '6px 8px' }}>Registrado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sessionDetail.waitlist.map((w) => (
+                          <tr key={w.enrollment_id} style={{ borderBottom: '1px solid #EEE' }}>
+                            <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: '#E8440F' }}>
+                              #{w.position}
+                            </td>
+                            <td style={{ padding: '6px 8px', fontWeight: 600 }}>{w.name}</td>
+                            <td style={{ padding: '6px 8px', color: '#5E584F' }}>{w.email}</td>
+                            <td style={{ padding: '6px 8px', color: '#5E584F' }}>
+                              {new Date(w.enrolled_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Columna 3: Registro de Cambios (Auditoría R11) */}
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #16130F', paddingBottom: '6px', marginBottom: '12px' }}>
+                  Registro de Cambios y Auditoría (R11)
+                </h3>
+                {sessionDetail.auditLogs.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: '#5E584F' }}>Sin modificaciones registradas.</p>
+                ) : (
+                  <div style={{ maxHeight: '340px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {sessionDetail.auditLogs.map((log) => (
+                      <div key={log.id} style={{ border: '1px solid #DDD7CC', padding: '8px 10px', fontSize: '12px', background: '#FBF9F6' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <strong style={{ fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase' }}>
+                            {log.action}
+                          </strong>
+                          <span style={{ color: '#5E584F', fontSize: '11px' }}>
+                            {new Date(log.created_at).toLocaleString('es-ES')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#5E584F' }}>
+                          Por: {log.changed_by_name || 'Sistema'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Columna 4: Encuestas y opiniones recibidas */}
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, borderBottom: '2px solid #B7700B', paddingBottom: '6px', marginBottom: '12px' }}>
+                  Encuestas de Satisfacción Recibidas ({sessionDetail.surveys.length})
+                </h3>
+                {sessionDetail.surveys.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: '#5E584F' }}>Aún no se han completado encuestas para esta sesión.</p>
+                ) : (
+                  <div style={{ maxHeight: '340px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {sessionDetail.surveys.map((sv) => (
+                      <div key={sv.id} style={{ border: '1px solid #DDD7CC', padding: '8px 10px', fontSize: '12px', background: '#FFFFFF' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                          <span style={{ fontWeight: 600 }}>{sv.user_name}</span>
+                          <span style={{ color: '#B7700B', fontWeight: 700 }}>⭐ {sv.rating} / 5</span>
+                        </div>
+                        {sv.comment && <p style={{ margin: '4px 0 0', color: '#16130F', fontStyle: 'italic' }}>"{sv.comment}"</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* MODAL CREAR SESIÓN (R17) */}
+      {showCreateModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '520px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px' }}>Crear nueva sesión</h3>
+            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Título *</label>
+                <input
+                  type="text"
+                  required
+                  value={createForm.title}
+                  onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                  placeholder="Ej. Taller de Arquitectura Limpia"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Tipo *</label>
+                  <select
+                    value={createForm.type}
+                    onChange={(e) => setCreateForm({ ...createForm, type: e.target.value })}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  >
+                    <option value="taller">Taller</option>
+                    <option value="hackatón">Hackatón</option>
+                    <option value="conferencia">Conferencia</option>
+                    <option value="encuentro">Encuentro</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Cupo (≥1) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={createForm.capacity}
+                    onChange={(e) => setCreateForm({ ...createForm, capacity: Number(e.target.value) })}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Ubicación</label>
+                <input
+                  type="text"
+                  value={createForm.location}
+                  onChange={(e) => setCreateForm({ ...createForm, location: e.target.value })}
+                  placeholder="Ej. Auditorio Alfa, Sala 2"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Inicio *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={createForm.starts_at}
+                    onChange={(e) => setCreateForm({ ...createForm, starts_at: e.target.value })}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Fin *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={createForm.ends_at}
+                    onChange={(e) => setCreateForm({ ...createForm, ends_at: e.target.value })}
+                    style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Descripción</label>
+                <textarea
+                  rows={3}
+                  value={createForm.description}
+                  onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                  placeholder="Descripción detallada de los objetivos y actividades de la sesión..."
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Estado inicial</label>
+                <select
+                  value={createForm.status}
+                  onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                >
+                  <option value="draft">Borrador (oculta al público)</option>
+                  <option value="published">Publicada (abierta a inscripciones)</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  style={{ padding: '8px 16px', background: '#FFFFFF', border: '1px solid #16130F', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 16px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Guardar sesión
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR SESIÓN (R14) */}
+      {editingSession && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '480px', width: '100%' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px' }}>Editar sesión</h3>
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Título</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Tipo</label>
+                <select
+                  value={editForm.type}
+                  onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                >
+                  <option value="taller">Taller</option>
+                  <option value="hackatón">Hackatón</option>
+                  <option value="conferencia">Conferencia</option>
+                  <option value="encuentro">Encuentro</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Ubicación</label>
+                <input
+                  type="text"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Descripción</label>
+                <textarea
+                  rows={3}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingSession(null)}
+                  style={{ padding: '8px 14px', background: '#FFFFFF', border: '1px solid #16130F', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+                >
+                  Guardar cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REPROGRAMAR SESIÓN (R8) */}
+      {reschedulingSession && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '440px', width: '100%' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 12px' }}>Reprogramar sesión</h3>
+            <p style={{ fontSize: '12px', color: '#5E584F', marginBottom: '14px' }}>
+              Al cambiar fecha o sala, el sistema revalidará choques de horario con las demás sesiones confirmadas de cada participante y les notificará dentro de la app (R8).
+            </p>
+            <form onSubmit={handleRescheduleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Nuevo inicio</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={rescheduleForm.starts_at}
+                  onChange={(e) => setRescheduleForm({ ...rescheduleForm, starts_at: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Nuevo fin</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={rescheduleForm.ends_at}
+                  onChange={(e) => setRescheduleForm({ ...rescheduleForm, ends_at: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Nueva sala / ubicación</label>
+                <input
+                  type="text"
+                  value={rescheduleForm.location}
+                  onChange={(e) => setRescheduleForm({ ...rescheduleForm, location: e.target.value })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setReschedulingSession(null)}
+                  style={{ padding: '8px 14px', background: '#FFFFFF', border: '1px solid #16130F', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+                >
+                  Reprogramar y avisar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REDUCIR AFORO (R7) */}
+      {reducingSession && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(22, 19, 15, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', border: '2px solid #16130F', padding: '24px', maxWidth: '420px', width: '100%' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 12px' }}>Reducir aforo</h3>
+            <p style={{ fontSize: '12px', color: '#5E584F', marginBottom: '14px' }}>
+              Capacidad actual: <strong>{reducingSession.capacity}</strong> plazas.<br />
+              Inscritos confirmados: <strong>{reducingSession.confirmed_count}</strong>.<br />
+              Política LIFO (R7): los últimos inscritos confirmados pasarán a la cabeza de la lista de espera con notificación en su bandeja.
+            </p>
+            <form onSubmit={handleReduceSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Nuevo aforo (≥1)</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={reduceForm.newCapacity}
+                  onChange={(e) => setReduceForm({ newCapacity: Number(e.target.value) })}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #16130F' }}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setReducingSession(null)}
+                  style={{ padding: '8px 14px', background: '#FFFFFF', border: '1px solid #16130F', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 14px', background: '#16130F', color: '#FFFFFF', border: 'none', cursor: 'pointer' }}
+                >
+                  Aplicar reducción LIFO
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
