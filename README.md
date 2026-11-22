@@ -215,18 +215,18 @@ refactor(schedule): decouple time slot overlap calculation from DB layer
 
 ---
 
-## Funcionalidad verificable: imágenes únicas de eventos
+## Funcionalidad verificable: catálogo público y aforo
 
-El catálogo genera imágenes SVG locales a partir del tipo, título, descripción e identificador de cada sesión. Una sesión no depende de enlaces externos y dos sesiones distintas pueden mostrar ilustraciones visualmente diferenciadas.
+El catálogo público carga las sesiones publicadas y muestra para cada una su tema, horario, cupos disponibles y estado de ocupación.
 
-1. Inicia la aplicación y abre `http://localhost:3000`.
-2. Comprueba que las tarjetas de distintas sesiones tengan banners visibles.
-3. Compara eventos de temas distintos, por ejemplo Web3, inteligencia artificial, Kubernetes e investigación doctoral.
-4. Abre una sesión y verifica que el banner del detalle corresponda al mismo evento.
-5. Ejecuta las pruebas específicas:
+1. Inicia PostgreSQL, ejecuta las migraciones y carga los datos de prueba (pasos de instalación anteriores).
+2. Inicia la aplicación y abre `http://localhost:3000`.
+3. Comprueba que las tarjetas muestren título, categoría, horario y ocupación.
+4. Filtra por tipo o fecha y confirma que el catálogo se actualice.
+5. Ejecuta la suite automatizada:
 
-```bash
-npx vitest run src/lib/__tests__/eventImages.test.ts
+```powershell
+npm test
 ```
 
 ---
