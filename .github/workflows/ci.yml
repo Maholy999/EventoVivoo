@@ -41,6 +41,12 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      - name: Ejecutar lint
+        run: npm run lint
+
+      - name: Aplicar migraciones
+        run: npm run db:migrate
+
       - name: Ejecutar pruebas unitarias e integración
         run: npm test -- --no-file-parallelism
 

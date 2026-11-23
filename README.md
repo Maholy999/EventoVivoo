@@ -10,6 +10,8 @@ EventoVivo es una plataforma web full-stack diseñada para resolver el problema 
 2. [Stack Tecnológico](#-stack-tecnológico)
 3. [Requisitos del Sistema](#-requisitos-del-sistema)
 4. [Instalación y Puesta en Marcha](#-instalación-y-puesta-en-marcha)
+   - [Funcionalidad verificable](#funcionalidad-verificable-catálogo-público-y-aforo)
+   - [Entorno local reproducible](#entorno-local-reproducible-con-docker-compose)
 5. [Variables de Entorno](#-variables-de-entorno)
 6. [Usuarios y Datos de Prueba (Seed)](#-usuarios-y-datos-de-prueba-seed)
 7. [Cómo Ejecutar las Pruebas y Cobertura](#-cómo-ejecutar-las-pruebas-y-cobertura)
@@ -88,6 +90,30 @@ npm run db:seed
 npm run dev
 ```
 Abre en tu navegador: [http://localhost:3000](http://localhost:3000).
+
+### Funcionalidad verificable: catálogo público y aforo
+
+El catálogo público carga las sesiones publicadas y muestra tema, horario, cupos disponibles y estado de ocupación.
+
+1. Inicia PostgreSQL, ejecuta las migraciones y carga los datos de prueba.
+2. Inicia la aplicación y abre `http://localhost:3000`.
+3. Comprueba que las tarjetas muestren título, categoría, horario y ocupación.
+4. Filtra por tipo o fecha y confirma que el catálogo se actualice.
+5. Ejecuta `npm test` y confirma que todas las pruebas pasan.
+
+### Entorno local reproducible con Docker Compose
+
+No se requiere una cuenta de nube para demostrar el despliegue local:
+
+```powershell
+docker compose up -d db
+docker compose run --rm app npm run db:migrate
+docker compose run --rm app npm run db:seed
+docker compose up -d app
+```
+
+La aplicación queda disponible en `http://localhost:3000`. Para detenerla y conservar los datos:
+`docker compose down`. Para reconstruir tras cambios: `docker compose up -d --build app`.
 
 ---
 
@@ -215,22 +241,6 @@ refactor(schedule): decouple time slot overlap calculation from DB layer
 
 ---
 
-## Funcionalidad verificable: catálogo público y aforo
-
-El catálogo público carga las sesiones publicadas y muestra para cada una su tema, horario, cupos disponibles y estado de ocupación.
-
-1. Inicia PostgreSQL, ejecuta las migraciones y carga los datos de prueba (pasos de instalación anteriores).
-2. Inicia la aplicación y abre `http://localhost:3000`.
-3. Comprueba que las tarjetas muestren título, categoría, horario y ocupación.
-4. Filtra por tipo o fecha y confirma que el catálogo se actualice.
-5. Ejecuta la suite automatizada:
-
-```powershell
-npm test
-```
-
----
-
 ## 🔄 Refactorización Documentada
 
 ### Refactorización: Desacoplamiento del Motor de Horarios y Traslapes
@@ -250,24 +260,21 @@ npm test
 Sigue este guion paso a paso para verificar el sistema completo:
 
 ### Paso 1: Ingreso a Lista de Espera por Aforo Completo (1 min)
-1. Inicia sesión como `mateo@universidad.edu` (Contraseña: `Pass123!`).
-2. En la Agenda, busca la sesión **"Hackatón Web3: Contratos Inteligentes"** (Capacidad: 2, inscritos: 2).
+1. Inicia sesión como `participante26@universidad.edu` (Contraseña: `Pass123!`). Este usuario ya ocupa la posición #1 en la lista de espera de S1.
+2. En la Agenda, busca **"Hackatón Web3: Contratos Inteligentes y DeFi"** (Cupo: 25, 25 confirmados y 7 en espera).
 3. Verás la luz de escenario en **Rojo: Aforo completo**.
 4. Haz clic en **"Entrar a Lista de Espera"**.
 5. **Resultado:** El sistema te asigna la posición en cola y muestra la etiqueta `⏳ En Lista de Espera`.
 
 ### Paso 2: Cancelación y Promoción Automática FIFO (1 min)
-1. Cierra sesión e ingresa como `carlos@universidad.edu` (Contraseña: `Pass123!`), quien tiene plaza confirmada en la misma sesión.
+1. Cierra sesión e ingresa como `participante1@universidad.edu` (Contraseña: `Pass123!`), quien tiene plaza confirmada en S1.
 2. En la tarjeta de la sesión, haz clic en **"Cancelar plaza"** y confirma el diálogo.
-3. **Resultado:** Se libera la plaza de Carlos y el sistema atómicamente promueve a `lucia@universidad.edu` (primera en lista de espera). Al recargar o ingresar con Lucía, su estado ahora es `✓ Inscripción Confirmada` y tiene su credencial lista.
+3. **Resultado:** Se libera una plaza y el sistema puede promover atómicamente al primer candidato elegible. Participante 26 ya está preparado como posición #1 en la cola.
 
 ### Paso 3: Acreditación QR e Idempotencia (1 min)
-1. Cierra sesión e ingresa como la organizadora: `org@eventovivo.edu` (Contraseña: `Admin123!`).
+1. Cierra sesión e ingresa como `org1@eventovivo.edu` (Contraseña: `Admin123!`).
 2. Dirígete a **"Panel Organizador"** en la barra superior.
-3. En la sección **"Registro de Acceso en Puerta"**, pega el token de prueba ya emitido para Diego:
-   ```
-   5f4dcc3b5aa765d61d8327deb882cf99
-   ```
+3. En la sección **"Registro de Acceso en Puerta"**, usa el token generado por el flujo real de acreditación o obtén el token emitido al participar; no uses ni publiques valores fijos en documentación o capturas.
 4. Haz clic en **"Validar Entrada"**.
 5. **Resultado:** El sistema responde de inmediato con:
    > `⚠️ ENTRADA YA REGISTRADA (IDEMPOTENTE)` con la hora original del primer ingreso y los datos de Diego Torres. No se duplica la asistencia.
