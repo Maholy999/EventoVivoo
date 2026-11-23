@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Practica DevOps - EventoVivo</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    body { font-family: Arial, sans-serif; color: #1f2937; line-height: 1.42; font-size: 10.5pt; }
+    section { page-break-after: always; min-height: 260mm; }
+    section:last-child { page-break-after: auto; }
+    h1 { color: #b91c1c; font-size: 26pt; margin: 8mm 0 4mm; }
+    h2 { color: #991b1b; border-bottom: 1px solid #fecaca; padding-bottom: 3mm; font-size: 17pt; }
+    h3 { color: #374151; font-size: 12pt; }
+    a { color: #2563eb; text-decoration: none; }
+    code, pre { background: #f3f4f6; border-radius: 3px; }
+    code { padding: 1px 4px; }
+    pre { padding: 3mm; white-space: pre-wrap; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #d1d5db; padding: 7px; text-align: left; vertical-align: top; }
+    th { background: #fee2e2; }
+    .meta { color: #6b7280; }
+    .ok { color: #166534; font-weight: bold; }
+    .fail { color: #b91c1c; font-weight: bold; }
+  </style>
+</head>
+<body>
+<section>
+  <h1>Práctica DevOps: GitHub Actions, pruebas y despliegue</h1>
+  <h3>Proyecto: EventoVivo - Kanban/XP</h3>
+  <p class="meta">Fecha: 23 de noviembre de 2026<br>Versión desplegada local: rama <code>fix/schedule-contiguous-overlap</code>, commit <code>d33c2e2</code></p>
+  <h2>Introducción</h2>
+  <p>EventoVivo aplica integración continua para validar una plataforma de eventos universitarios antes de fusionar cambios. El repositorio incluye estrategia de ramas, documentación de ejecución, pruebas unitarias e integración, migraciones PostgreSQL y un entorno local reproducible con Docker Compose.</p>
+  <p><strong>Historia relacionada:</strong> R2 - Detectar traslapes entre sesiones sin confundir los horarios consecutivos.</p>
+  <p><strong>Criterio de aceptación:</strong> si una sesión termina exactamente cuando comienza otra, no existe choque; los solapamientos parciales, totales e idénticos sí deben detectarse.</p>
+  <p><strong>Prueba:</strong> <code>src/domain/__tests__/schedule.test.ts</code>, casos “sesiones consecutivas” y <code>hasScheduleConflict</code>.</p>
+</section>
+
+<section>
+  <h2>Arquitectura mínima y despliegue</h2>
+  <h3>Entorno local reproducible</h3>
+  <pre>GitHub/VS Code
+  -> docker compose
+     -> app (Next.js, puerto 3000)
+     -> db (PostgreSQL 16, puerto 5435)
+     -> db_test (PostgreSQL 16, puerto 5436)</pre>
+  <p>Comprobación realizada:</p>
+  <ul>
+    <li><code>/</code>: HTTP 200</li>
+    <li><code>/api/sessions</code>: HTTP 200</li>
+    <li>Contenedores: app, db y db_test iniciados; db y db_test saludables.</li>
+  </ul>
+  <pre>docker compose up -d db db_test app
+docker compose run --rm app npm run db:migrate
+docker compose run --rm app npm run db:seed
+docker compose up -d app</pre>
+  <p>Para recuperación: <code>docker compose down</code> conserva datos; <code>docker compose down -v</code> solo debe usarse si se acepta reiniciar las bases; <code>docker compose up -d --build app</code> reconstruye una versión estable.</p>
+</section>
+
+<section>
+  <h2>Etapas del pipeline y evidencias</h2>
+  <table>
+    <tr><th>Paso</th><th>Comprobación</th></tr>
+    <tr><td>Checkout + Node 20</td><td>Descarga el commit exacto y prepara npm con caché.</td></tr>
+    <tr><td>Instalar dependencias</td><td><code>npm ci</code> garantiza el lockfile reproducible.</td></tr>
+    <tr><td>Ejecutar lint</td><td><code>npm run lint</code> aplica reglas de calidad; queda sin errores y con 3 advertencias existentes de imágenes.</td></tr>
+    <tr><td>Aplicar migraciones</td><td><code>npm run db:migrate</code> prepara el esquema PostgreSQL de CI.</td></tr>
+    <tr><td>Ejecutar pruebas</td><td><code>npm test -- --no-file-parallelism</code> ejecuta suites unitarias e integración.</td></tr>
+    <tr><td>Verificar tipos</td><td><code>npx tsc --noEmit</code> detecta incompatibilidades TypeScript.</td></tr>
+    <tr><td>Construir proyecto</td><td><code>npm run build</code> genera el artefacto Next.js.</td></tr>
+  </table>
+  <h3>Ejecución fallida controlada</h3>
+  <p><strong>CI #10, commit 027ad32:</strong> al cambiar <code>&lt;</code> y <code>&gt;</code> por <code>&lt;=</code> y <code>&gt;=</code>, Vitest comprobó límites inclusivos y marcó 5 aserciones relacionadas con sesiones contiguas. <span class="fail">Resultado: fallida.</span></p>
+  <p><a href="https://github.com/Maholy999/EventoVivoo/actions/runs/45237619181">Ejecución roja #10</a></p>
+  <h3>Corrección y ejecución verde</h3>
+  <p><strong>CI #11, commit ddc3869:</strong> se restauraron los límites estrictos. Las 10 pruebas de horarios pasaron localmente y la suite remota terminó correctamente. <span class="ok">Resultado: exitosa.</span></p>
+  <p><a href="https://github.com/Maholy999/EventoVivoo/actions/runs/45238563432">Ejecución verde #11</a></p>
+</section>
+
+<section>
+  <h2>Prueba del producto, error y recuperación</h2>
+  <h3>Recorrido principal</h3>
+  <ol>
+    <li>Abrir <code>http://localhost:3000</code> y comprobar el catálogo.</li>
+    <li>Iniciar sesión como <code>participante26@universidad.edu</code> con la contraseña del seed. Verificar posición #1 en S1.</li>
+    <li>Usar <code>participante1@universidad.edu</code> para cancelar una plaza confirmada y comprobar promoción FIFO.</li>
+    <li>Usar <code>org1@eventovivo.edu</code> para revisar el panel organizador y exportar asistencia.</li>
+  </ol>
+  <h3>Caso de error</h3>
+  <p>Introducir dos sesiones contiguas (12:00-14:00 y 14:00-16:00) debe producir <code>schedule_conflict=false</code>. Si la prueba falla, revertir con <code>git revert &lt;commit-inestable&gt;</code> o regresar a la etiqueta estable correspondiente.</p>
+  <h3>Registros y secretos</h3>
+  <p>Los registros se obtienen con <code>docker compose logs app</code>. No se colocan contraseñas ni tokens en capturas; CI usa secretos/variables del entorno y el Docker Compose local usa únicamente valores de prueba documentados.</p>
+  <h3>Versión estable y rollback</h3>
+  <pre>git checkout main
+git pull origin main
+docker compose up -d --build app
+docker compose logs --tail=100 app</pre>
+</section>
+
+<section>
+  <h2>Revisión, aporte y enlaces</h2>
+  <h3>Pull request y revisión</h3>
+  <p>PR: <a href="https://github.com/Maholy999/EventoVivoo/pull/1">Pull request #1 - fix/schedule-contiguous-overlap</a></p>
+  <p>El PR relaciona R2 con la prueba de límites contiguos y contiene 4 commits: falla controlada, limpieza de lint, corrección y optimización Docker. Falta que el compañero haga la aprobación formal y deje comentario antes del merge.</p>
+  <h3>Aportes del equipo</h3>
+  <ul>
+    <li>Integración continua y control de calidad: configuración del pipeline, migraciones y lint.</li>
+    <li>Práctica TDD: evidencia roja, corrección verde y explicación de cada aserción.</li>
+    <li>Despliegue local: Docker Compose, PostgreSQL, build Next.js y prueba HTTP.</li>
+  </ul>
+  <h3>Enlaces finales</h3>
+  <ul>
+    <li><a href="https://github.com/Maholy999/EventoVivoo">Repositorio</a></li>
+    <li><a href="https://github.com/Maholy999/EventoVivoo/blob/main/.github/workflows/ci.yml">Workflow CI</a></li>
+    <li><a href="https://github.com/Maholy999/EventoVivoo/blob/main/README.md">README e instrucciones locales</a></li>
+    <li><a href="http://localhost:3000">Aplicación local</a></li>
+  </ul>
+  <p><strong>Demo 3-5 minutos:</strong> catálogo → login participante26 → revisión de S1 → organización con org1 → mostrar #10 roja y #11 verde → mostrar Docker Compose.</p>
+</section>
+</body>
+</html>
