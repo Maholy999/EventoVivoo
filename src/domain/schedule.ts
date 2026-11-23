@@ -9,7 +9,7 @@ export interface TimeSlot {
  * Sesiones consecutivas (fin_A === inicio_B o fin_B === inicio_A) NO chocan.
  */
 export function overlaps(a: TimeSlot, b: TimeSlot): boolean {
-  return a.starts_at < b.ends_at && a.ends_at > b.starts_at;
+  return a.starts_at <= b.ends_at && a.ends_at >= b.starts_at;
 }
 
 /**
