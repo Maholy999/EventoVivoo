@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SegmentedMeter } from './components/SegmentedMeter';
 import { getSessionImage } from '@/lib/eventImages';
@@ -71,8 +71,6 @@ export default function HomePage() {
   const [surveyComment, setSurveyComment] = useState('');
   const [submittingSurvey, setSubmittingSurvey] = useState(false);
 
-  const [, startTransition] = useTransition();
-
   const loadData = async () => {
     try {
       const res = await fetch('/api/sessions');
@@ -96,7 +94,10 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    loadData();
+    const timeoutId = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const handleEnroll = async (sessionId: string) => {
@@ -1244,7 +1245,7 @@ export default function HomePage() {
               ¿Deseas cancelar tu inscripción?
             </h3>
             <p style={{ fontSize: '13px', color: '#5E584F', lineHeight: 1.5, margin: '0 0 18px' }}>
-              Estás a punto de cancelar tu lugar en <strong>"{sessionToCancel.title}"</strong>. Si confirmas, tu plaza quedará libre y se promoverá automáticamente al primer participante en lista de espera.
+              Estás a punto de cancelar tu lugar en <strong>&ldquo;{sessionToCancel.title}&rdquo;</strong>. Si confirmas, tu plaza quedará libre y se promoverá automáticamente al primer participante en lista de espera.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
@@ -1418,7 +1419,7 @@ export default function HomePage() {
               Opinión del Asistente
             </div>
             <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 4px' }}>
-              ¿Cómo calificarías "{surveyModalSession.title}"?
+              ¿Cómo calificarías &ldquo;{surveyModalSession.title}&rdquo;?
             </h3>
             <p style={{ fontSize: '12px', color: '#5E584F', margin: '0 0 16px' }}>
               Tu respuesta es breve (máximo 30 segundos) y ayuda al organizador a calibrar las próximas sesiones.

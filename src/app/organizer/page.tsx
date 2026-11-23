@@ -202,8 +202,8 @@ export default function OrganizerPage() {
   };
 
   useEffect(() => {
-    loadDashboard();
-    if (typeof window !== 'undefined') {
+    const timeoutId = window.setTimeout(() => {
+      void loadDashboard();
       const params = new URLSearchParams(window.location.search);
       if (params.get('create') === 'true' || params.get('action') === 'new') {
         openCreateModal();
@@ -211,7 +211,8 @@ export default function OrganizerPage() {
       if (params.get('tab') === 'mis_sesiones') {
         setActiveTab('mis_sesiones');
       }
-    }
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const openSessionDetail = async (id: string) => {
@@ -1551,7 +1552,7 @@ export default function OrganizerPage() {
                           <span style={{ fontWeight: 600 }}>{sv.user_name}</span>
                           <span style={{ color: '#B7700B', fontWeight: 700 }}>⭐ {sv.rating} / 5</span>
                         </div>
-                        {sv.comment && <p style={{ margin: '4px 0 0', color: '#16130F', fontStyle: 'italic' }}>"{sv.comment}"</p>}
+                        {sv.comment && <p style={{ margin: '4px 0 0', color: '#16130F', fontStyle: 'italic' }}>&ldquo;{sv.comment}&rdquo;</p>}
                       </div>
                     ))}
                   </div>
