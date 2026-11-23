@@ -24,11 +24,12 @@ async function main() {
 
     console.log('✅ Organizador creado exitosamente:');
     console.log(res.rows[0]);
-  } catch (err: any) {
-    if (err.code === '23505') {
+  } catch (err: unknown) {
+    const pgError = err as { code?: string; message?: string };
+    if (pgError.code === '23505') {
       console.error('❌ Error: El correo electrónico ya está registrado.');
     } else {
-      console.error('❌ Error al crear organizador:', err.message);
+      console.error('❌ Error al crear organizador:', pgError.message);
     }
     process.exit(1);
   } finally {
