@@ -1,0 +1,8 @@
+.git
+.github
+.copilot
+node_modules
+.next
+coverage
+*.log
+.env*
