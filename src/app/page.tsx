@@ -387,7 +387,7 @@ export default function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
             {/* Confirmadas */}
             {myConfirmedSessions.map((s) => {
-              const img = getSessionImage(s.type, s.title, s.id);
+              const img = getSessionImage(s.type, s.title, s.id, s.description ?? undefined);
               return (
                 <div
                   key={`my-conf-${s.id}`}
@@ -406,7 +406,8 @@ export default function HomePage() {
                       src={img.url}
                       alt={img.alt}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      loading="lazy"
+                      loading="eager"
+                      decoding="sync"
                     />
                     <div style={{ position: 'absolute', top: '8px', left: '8px' }}>
                       <span className="tag-inscrito">INSCRITO CONFIRMADO</span>
@@ -711,7 +712,7 @@ export default function HomePage() {
                   const isUserConfirmed = s.user_status === 'confirmed';
                   const isUserWaitlisted = s.user_status === 'waitlisted';
                   const isUserPending = s.user_status === 'pending';
-                  const img = getSessionImage(s.type, s.title, s.id);
+                  const img = getSessionImage(s.type, s.title, s.id, s.description ?? undefined);
 
                   return (
                     <div
@@ -741,7 +742,8 @@ export default function HomePage() {
                           src={img.url}
                           alt={img.alt}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          loading="lazy"
+                          loading="eager"
+                          decoding="sync"
                         />
                         <div style={{ position: 'absolute', top: '10px', left: '10px', display: 'flex', gap: '6px' }}>
                           {isUserConfirmed ? (
@@ -980,7 +982,7 @@ export default function HomePage() {
             {/* Banner de Imagen del Evento */}
             <div style={{ height: '180px', width: '100%', position: 'relative', overflow: 'hidden' }}>
               <img
-                src={getSessionImage(selectedSession.type, selectedSession.title, selectedSession.id).url}
+                src={getSessionImage(selectedSession.type, selectedSession.title, selectedSession.id, selectedSession.description ?? undefined).url}
                 alt={selectedSession.title}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />

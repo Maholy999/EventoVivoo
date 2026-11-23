@@ -11,6 +11,25 @@ export interface EventImage {
   accentColor: string;
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function hashEventSeed(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 interface ThemeConfig {
   icon: string; // SVG path / elements
   tag: string;
@@ -20,9 +39,163 @@ interface ThemeConfig {
   patternType: 'grid' | 'dots' | 'isometric' | 'waves';
 }
 
-function getThemeForEvent(type: string, title?: string, id?: string): ThemeConfig {
+function getThemeForEvent(type: string, title?: string, description?: string): ThemeConfig {
   const t = (title || '').toLowerCase();
+  const d = (description || '').toLowerCase();
+  const subject = `${t} ${d}`;
   const cat = (type || '').toLowerCase();
+
+  // Temas específicos: deben evaluarse antes de reglas generales por categoría.
+  if (subject.includes('web3') || subject.includes('blockchain') || subject.includes('defi') || subject.includes('contratos inteligentes')) {
+    return {
+      tag: 'WEB3 & BLOCKCHAIN',
+      accentColor: '#B7700B',
+      bgGradStart: '#17130D',
+      bgGradEnd: '#302817',
+      patternType: 'isometric',
+      icon: `
+        <path d="M50 16 L76 31 L76 62 L50 78 L24 62 L24 31 Z" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <path d="M24 31 L50 46 L76 31 M50 46 L50 78 M24 62 L50 46 L76 62" fill="none" stroke="#DDD7CC" stroke-width="2" />
+        <circle cx="50" cy="46" r="7" fill="#E8440F" />
+      `,
+    };
+  }
+
+  if (subject.includes('agentes inteligentes') || subject.includes('llms') || subject.includes('mcp') || subject.includes('multi-agente')) {
+    return {
+      tag: 'AGENTIC AI & LLMS',
+      accentColor: '#E8440F',
+      bgGradStart: '#1D1511',
+      bgGradEnd: '#3A241A',
+      patternType: 'dots',
+      icon: `
+        <rect x="38" y="38" width="24" height="24" rx="4" fill="#E8440F" />
+        <circle cx="50" cy="24" r="7" fill="#FFFFFF" />
+        <circle cx="24" cy="50" r="7" fill="#FFFFFF" />
+        <circle cx="76" cy="50" r="7" fill="#FFFFFF" />
+        <circle cx="50" cy="76" r="7" fill="#FFFFFF" />
+        <line x1="50" y1="31" x2="50" y2="38" stroke="#FFFFFF" stroke-width="2.5" />
+        <line x1="31" y1="50" x2="38" y2="50" stroke="#FFFFFF" stroke-width="2.5" />
+        <line x1="62" y1="50" x2="69" y2="50" stroke="#FFFFFF" stroke-width="2.5" />
+        <line x1="50" y1="62" x2="50" y2="69" stroke="#FFFFFF" stroke-width="2.5" />
+      `,
+    };
+  }
+
+  if (subject.includes('react') || subject.includes('canvas') || subject.includes('visualización de datos')) {
+    return {
+      tag: 'DATA VISUALIZATION',
+      accentColor: '#B7700B',
+      bgGradStart: '#172027',
+      bgGradEnd: '#2A3A44',
+      patternType: 'grid',
+      icon: `
+        <rect x="22" y="22" width="56" height="56" rx="4" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <path d="M30 68 L30 58 L42 58 L42 48 L54 48 L54 36 L66 36 L66 28" fill="none" stroke="#E8440F" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="30" cy="68" r="3" fill="#FFFFFF" />
+        <circle cx="66" cy="28" r="3" fill="#FFFFFF" />
+      `,
+    };
+  }
+
+  if (subject.includes('k6') || subject.includes('playwright') || subject.includes('performance') || subject.includes('pruebas automatizadas')) {
+    return {
+      tag: 'TESTING & PERFORMANCE',
+      accentColor: '#1E6B4F',
+      bgGradStart: '#111C17',
+      bgGradEnd: '#263A30',
+      patternType: 'grid',
+      icon: `
+        <circle cx="50" cy="50" r="30" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <path d="M50 20 A30 30 0 0 1 72 73" fill="none" stroke="#E8440F" stroke-width="5" />
+        <path d="M50 50 L66 34" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" />
+        <circle cx="50" cy="50" r="5" fill="#E8440F" />
+      `,
+    };
+  }
+
+  if (subject.includes('líder') || subject.includes('liderazgo') || subject.includes('mentoría') || subject.includes('mentoria')) {
+    return {
+      tag: 'LEADERSHIP & MENTORSHIP',
+      accentColor: '#B7700B',
+      bgGradStart: '#211A10',
+      bgGradEnd: '#3C3020',
+      patternType: 'dots',
+      icon: `
+        <circle cx="50" cy="28" r="10" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <circle cx="28" cy="62" r="8" fill="none" stroke="#B7700B" stroke-width="3" />
+        <circle cx="72" cy="62" r="8" fill="none" stroke="#B7700B" stroke-width="3" />
+        <path d="M32 54 C36 42 44 38 50 38 C56 38 64 42 68 54" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <line x1="28" y1="70" x2="28" y2="78" stroke="#E8440F" stroke-width="3" />
+        <line x1="72" y1="70" x2="72" y2="78" stroke="#E8440F" stroke-width="3" />
+      `,
+    };
+  }
+
+  if (subject.includes('curvas elípticas') || subject.includes('criptografía') || subject.includes('criptografia') || subject.includes('cuántica') || subject.includes('quantum')) {
+    return {
+      tag: 'CRYPTOGRAPHY & QUANTUM',
+      accentColor: '#B7700B',
+      bgGradStart: '#17160F',
+      bgGradEnd: '#302A1B',
+      patternType: 'isometric',
+      icon: `
+        <ellipse cx="50" cy="50" rx="34" ry="12" fill="none" stroke="#DDD7CC" stroke-width="2.5" transform="rotate(25 50 50)" />
+        <ellipse cx="50" cy="50" rx="34" ry="12" fill="none" stroke="#DDD7CC" stroke-width="2.5" transform="rotate(-25 50 50)" />
+        <ellipse cx="50" cy="50" rx="34" ry="12" fill="none" stroke="#B7700B" stroke-width="2.5" transform="rotate(90 50 50)" />
+        <circle cx="50" cy="50" r="7" fill="#E8440F" />
+      `,
+    };
+  }
+
+  if (subject.includes('ciudades inteligentes') || subject.includes('iot') || subject.includes('lorawan') || subject.includes('sensores')) {
+    return {
+      tag: 'SMART CITIES & IOT',
+      accentColor: '#1E6B4F',
+      bgGradStart: '#101B1A',
+      bgGradEnd: '#223A37',
+      patternType: 'grid',
+      icon: `
+        <rect x="24" y="48" width="12" height="30" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <rect x="44" y="34" width="12" height="44" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <rect x="64" y="40" width="12" height="38" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <circle cx="50" cy="22" r="5" fill="#E8440F" />
+        <path d="M38 24 C42 16 58 16 62 24 M34 30 C40 18 60 18 66 30" fill="none" stroke="#FFFFFF" stroke-width="2" />
+      `,
+    };
+  }
+
+  if (subject.includes('investigación doctoral') || subject.includes('doctorado') || subject.includes('postgrado') || subject.includes('becas')) {
+    return {
+      tag: 'DOCTORAL RESEARCH',
+      accentColor: '#B7700B',
+      bgGradStart: '#1B1811',
+      bgGradEnd: '#332B1C',
+      patternType: 'dots',
+      icon: `
+        <path d="M18 42 L50 24 L82 42 L50 60 Z" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <path d="M30 48 V68 C30 68 50 80 70 68 V48" fill="none" stroke="#DDD7CC" stroke-width="3" />
+        <line x1="82" y1="42" x2="82" y2="68" stroke="#E8440F" stroke-width="3" />
+        <circle cx="82" cy="72" r="4" fill="#E8440F" />
+      `,
+    };
+  }
+
+  if (subject.includes('ética') || subject.includes('etica') || subject.includes('sesgos') || subject.includes('gobernanza')) {
+    return {
+      tag: 'AI ETHICS & GOVERNANCE',
+      accentColor: '#B7700B',
+      bgGradStart: '#1E1A14',
+      bgGradEnd: '#37301F',
+      patternType: 'grid',
+      icon: `
+        <circle cx="50" cy="50" r="32" fill="none" stroke="#FFFFFF" stroke-width="3" />
+        <path d="M50 20 V80 M20 50 H80" stroke="#B7700B" stroke-width="2" />
+        <path d="M50 27 L60 42 L55 58 L45 58 L40 42 Z" fill="none" stroke="#E8440F" stroke-width="3" />
+        <circle cx="50" cy="50" r="5" fill="#FFFFFF" />
+      `,
+    };
+  }
 
   // 1. Arquitectura Limpia / DDD
   if (t.includes('arquitectura') || t.includes('ddd') || t.includes('limpia')) {
@@ -313,9 +486,15 @@ function generatePatternSvg(type: 'grid' | 'dots' | 'isometric' | 'waves', color
   `;
 }
 
-export function getSessionImage(type: string, title?: string, id?: string): EventImage {
-  const theme = getThemeForEvent(type, title, id);
-  const displayTitle = (title || type || 'Evento Universitario').slice(0, 36);
+export function getSessionImage(type: string, title?: string, id?: string, description?: string): EventImage {
+  const theme = getThemeForEvent(type, title, description);
+  const escapedTag = escapeXml(theme.tag);
+  const displayTitle = escapeXml((title || type || 'Evento Universitario').replace(/\s+/g, ' ').trim().slice(0, 36));
+  const eventSeed = hashEventSeed(`${id || ''}|${type || ''}|${title || ''}`);
+  const eventCode = eventSeed.toString(36).toUpperCase().padStart(7, '0').slice(-7);
+  const patternOffsetX = eventSeed % 24;
+  const patternOffsetY = (eventSeed >>> 5) % 24;
+  const artRotation = (eventSeed % 21) - 10;
 
   // SVG Banner de alta fidelidad, 800x320 px, 100% vectorial, 0ms de carga
   const rawSvg = `
@@ -331,10 +510,12 @@ export function getSessionImage(type: string, title?: string, id?: string): Even
       <rect width="800" height="320" fill="url(#bgGrad)" />
 
       <!-- Textura de Trama Geométrica -->
-      ${generatePatternSvg(theme.patternType, '#FFFFFF')}
+      <g transform="translate(${patternOffsetX} ${patternOffsetY})">
+        ${generatePatternSvg(theme.patternType, '#FFFFFF')}
+      </g>
 
       <!-- Elemento de Arte Conceptual a la Izquierda -->
-      <g transform="translate(60, 110) scale(1.4)">
+      <g transform="translate(60, 110) scale(1.4) rotate(${artRotation} 50 50)">
         <circle cx="50" cy="50" r="44" fill="#16130F" opacity="0.6" stroke="${theme.accentColor}" stroke-width="2" />
         ${theme.icon}
       </g>
@@ -347,7 +528,7 @@ export function getSessionImage(type: string, title?: string, id?: string): Even
 
       <!-- Tipografía y Etiquetas en el Banner -->
       <text x="240" y="100" font-family="monospace" font-size="14" font-weight="700" fill="${theme.accentColor}" letter-spacing="3">
-        ● ${theme.tag}
+        ● ${escapedTag}
       </text>
 
       <text x="240" y="155" font-family="sans-serif, system-ui" font-size="28" font-weight="800" fill="#FFFFFF" letter-spacing="-0.5">
@@ -356,6 +537,10 @@ export function getSessionImage(type: string, title?: string, id?: string): Even
 
       <text x="240" y="200" font-family="monospace" font-size="13" font-weight="500" fill="#DDD7CC" opacity="0.85">
         PROGRAMA OFICIAL EVENTOVIVO · EN VIVO
+      </text>
+
+      <text x="730" y="288" text-anchor="end" font-family="monospace" font-size="10" font-weight="700" fill="#DDD7CC" opacity="0.7">
+        EV-${eventCode}
       </text>
 
       <!-- Acento Bermellón de Señal en Esquina -->
